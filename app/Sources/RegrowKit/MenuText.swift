@@ -33,6 +33,13 @@ public enum MenuText {
         }
     }
 
+    /// A tick's terminal error. A locked gate refused the prune, not
+    /// the check: the tick's figures are in the menu.
+    public static func tickError(code: String?, message: String?) -> String {
+        let words = message ?? code ?? "unknown error"
+        return code == "autotrim_locked" ? "Autotrim did not run: \(words)" : "Last check failed: \(words)"
+    }
+
     public static func fullDiskAccess(_ fda: String?) -> String {
         switch fda {
         case "granted": return "Full Disk Access: granted"

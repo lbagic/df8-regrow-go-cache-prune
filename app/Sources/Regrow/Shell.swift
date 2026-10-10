@@ -244,7 +244,7 @@ final class Shell: ObservableObject {
             lockNoticed = false
             watch?.settled()
         case "error" where ofTick:
-            tickError = head.message ?? head.code
+            tickError = MenuText.tickError(code: head.code, message: head.message)
             // A locked gate fails every tick while headroom stays low:
             // it is news once, not every quarter of an hour.
             if let notice = AlertText.notice(forError: head.code ?? "", message: head.message ?? "") {

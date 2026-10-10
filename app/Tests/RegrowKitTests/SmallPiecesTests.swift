@@ -188,6 +188,17 @@ struct MenuTextTests {
         #expect(MenuText.forecast(try tick(extra)) == text)
     }
 
+    @Test("a locked gate reads as autotrim not running, any other tick error as a failed check")
+    func tickError() {
+        #expect(
+            MenuText.tickError(code: "autotrim_locked", message: "autotrim is locked for go-build-cache")
+                == "Autotrim did not run: autotrim is locked for go-build-cache")
+        #expect(
+            MenuText.tickError(code: "tick_failed", message: "statfs: input/output error")
+                == "Last check failed: statfs: input/output error")
+        #expect(MenuText.tickError(code: "tick_failed", message: nil) == "Last check failed: tick_failed")
+    }
+
     @Test("staging bytes are read when the engine sends them")
     func staging() throws {
         #expect(try tick(#","staged_bytes":2048"#).stagedBytes == 2048)

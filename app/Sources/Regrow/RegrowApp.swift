@@ -45,7 +45,7 @@ struct MenuView: View {
             Text("Not checked yet")
         }
         if let error = shell.tickError {
-            Text("Last check failed: \(error)")
+            Text(error)
         }
         if let down = shell.engineDown {
             Text("The engine is not running: \(down)")
