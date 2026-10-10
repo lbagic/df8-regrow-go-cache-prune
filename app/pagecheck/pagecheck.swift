@@ -6,14 +6,18 @@
 //
 // Each scenario loads the page fresh in an offscreen web view, answers what the page asks with the section of
 // the transcript the scenario names, waits for the page to settle, asserts on the DOM and on what the page
-// sent, and writes a PNG of the 900×640 window. It exits 1 with a line per failure. PAGECHECK_ONLY in the
-// environment, a comma-separated list of scenario names, runs only those.
+// sent, and writes a PNG of the 900×640 window. It exits 1 with a line per failure. Two things in the
+// environment are for a closer look: PAGECHECK_ONLY, a comma-separated list of scenario names, runs only
+// those; PAGECHECK_SIZE, as 720x520, draws the window at another size.
 //
 // What reaches the page is the transcript's own lines, with four substitutions a recording cannot hold:
 // REQ becomes the id of the request being answered; a plan's expires_at is set from this run's clock, in the
 // shape a real engine writes it (a fraction of a second); hello's fda is set to denied for one scenario; and a
 // canceled scan ends with the recorded done line saying canceled. Error events and the shell's own messages
 // are not in the transcript: the checker writes them, the errors in the engine's words.
+//
+// Nothing here waits on a guess of how long the page takes. The page says when it has settled; a plan grows
+// too old because the checker moves the page's clock forward, not because time passed.
 import AppKit
 import WebKit
 
@@ -87,7 +91,6 @@ struct Play {
     var scan = "scan"
     var scanStops = false                // half the findings arrive, the rest wait for a cancel
     var planError: (code: String, message: String)?  // the answer to the next plan request that carries a select
-    var planLife = 570.0                 // seconds from a plan's answer to its expires_at
     var leaveOpen = false                // a selection the transcript has no plan for goes unanswered
     var automation: Bool? = true         // nil: the answer is withheld
     var execute = "execute"
@@ -95,6 +98,12 @@ struct Play {
     var executeError: (code: String, message: String)?  // the answer to the next execute
     var clockStops = false               // the page's timers never fire
 }
+
+/// The window the page is drawn in: the size DESIGN.md draws it for, unless the environment asks otherwise.
+let windowSize: CGSize = {
+    let parts = (ProcessInfo.processInfo.environment["PAGECHECK_SIZE"] ?? "").split(separator: "x").compactMap { Double($0) }
+    return parts.count == 2 ? CGSize(width: parts[0], height: parts[1]) : CGSize(width: 900, height: 640)
+}()
 
 @MainActor
 final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
@@ -116,6 +125,7 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
     private var loads = 0
     private var ids = Set<String>()
 
+    private var ahead = 0.0              // seconds the page's clock runs ahead of this one
     private var given = Set<String>()    // atoms the delivered findings' selects handed over
     private var scanRequest = ""
     private var scanHeld: [String] = []
@@ -128,7 +138,7 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
         self.transcript = transcript
         self.out = out
         self.play = play
-        let frame = NSRect(x: 0, y: 0, width: 900, height: 640)
+        let frame = NSRect(origin: .zero, size: windowSize)
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         // From the document's first line on: script errors, rejections, and anything the page's policy refused.
@@ -143,10 +153,20 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
                 })();
                 """,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        if play.clockStops {
-            configuration.userContentController.addUserScript(WKUserScript(
-                source: "window.setInterval = () => 0;", injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        }
+        // The page's clock can be moved forward, and for one scenario its timers never fire. Each Return key
+        // that has gone all the way through the page is counted, so a key press is waited for, not guessed at.
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: """
+                (function () {
+                  const now = Date.now.bind(Date);
+                  window.pagecheckAhead = 0;
+                  Date.now = () => now() + window.pagecheckAhead;
+                  if (\(play.clockStops)) window.setInterval = () => 0;
+                  window.pagecheckKeys = 0;
+                  addEventListener('keyup', (e) => { if (e.key === 'Enter') window.pagecheckKeys++; }, true);
+                })();
+                """,
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: frame, configuration: configuration)
         window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
         super.init()
@@ -244,7 +264,7 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
     /// Clicks an element as script can: `force` first takes away what marks it as disabled, so that only the
     /// page's own check of its state stands between the click and what it would do.
     @discardableResult
-    func click(_ selector: String, force: Bool = false, quiet: Double = 0.3) async -> Bool {
+    func click(_ selector: String, force: Bool = false) async -> Bool {
         let hit = await js("""
             const el = document.querySelector(selector);
             if (!el) return false;
@@ -252,7 +272,7 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
             el.click();
             return true;
             """, ["selector": selector, "force": force]) as? Bool ?? false
-        await settle(quiet)
+        await settle()
         return hit
     }
 
@@ -261,7 +281,8 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
     }
 
     /// A real Return key, through the web view as a keyboard would send it.
-    func pressReturn(quiet: Double = 0.3) async {
+    func pressReturn() async {
+        let before = await js("return window.pagecheckKeys") as? Int ?? 0
         for type in [NSEvent.EventType.keyDown, .keyUp] {
             guard let event = NSEvent.keyEvent(
                 with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
@@ -270,38 +291,55 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
             else { continue }
             if type == .keyDown { webView.keyDown(with: event) } else { webView.keyUp(with: event) }
         }
-        await settle(quiet)
+        // A key reaches the page by another road than a call does.
+        await wait(for: "the Return key reaching the page", "window.pagecheckKeys > \(before)")
     }
 
     func sleep(_ seconds: Double) async { try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9)) }
 
-    /// Waits until the page has drawn everything it was sent: nothing is left to deliver, and neither its
-    /// count of renders nor what it has posted has changed for `quiet` seconds. The default outlasts the
-    /// page's tick-box debounce; a shorter one is for a click that must do nothing.
-    func settle(_ quiet: Double = 0.3) async {
-        let deadline = Date().addingTimeInterval(10)
+    /// Waits until the page has drawn everything it was sent and says it has settled: nothing is left to
+    /// deliver, the page's mark is set, and neither the mark nor what the page has posted changes any more.
+    /// The mark is read by a call into the page, and what the page posted before answering that call has
+    /// arrived by the time it returns, so the short pause is a margin, not what the wait rests on.
+    func settle() async {
+        let deadline = Date().addingTimeInterval(45)
         var seen = ("", -1), since = Date()
         while Date() < deadline {
             let mark = await js("return document.documentElement.dataset.settled || ''") as? String ?? ""
-            if (mark, posted.count) != seen || pumping || !outbox.isEmpty {
+            if (mark, posted.count) != seen || mark.isEmpty || pumping || !outbox.isEmpty {
                 seen = (mark, posted.count)
                 since = Date()
-            } else if Date().timeIntervalSince(since) > quiet {
-                expect(!mark.isEmpty, "the page never said it had settled")
+            } else if Date().timeIntervalSince(since) > 0.08 {
                 return
             }
-            await sleep(0.03)
+            await sleep(0.02)
         }
         fail("the page did not settle")
+    }
+
+    /// Waits for something the page does by its own clock.
+    func wait(for what: String, _ condition: String) async {
+        let deadline = Date().addingTimeInterval(45)
+        while Date() < deadline {
+            if await flag("return " + condition) { return await settle() }
+            await sleep(0.05)
+        }
+        fail("never happened: \(what)")
+    }
+
+    /// Moves the page's clock forward.
+    func jump(minutes: Double) async {
+        ahead += minutes * 60
+        await js("window.pagecheckAhead = ms; return null", ["ms": ahead * 1000])
     }
 
     func shoot(_ suffix: String = "", top selector: String? = nil) async {
         if let selector {
             await js("const el = document.querySelector(selector); if (el) document.getElementById('page').scrollTop += el.getBoundingClientRect().top - 110; return null", ["selector": selector])
-            await sleep(0.1)
+            await settle()
         }
         let configuration = WKSnapshotConfiguration()
-        configuration.rect = CGRect(x: 0, y: 0, width: 900, height: 640)
+        configuration.rect = CGRect(origin: .zero, size: windowSize)
         let file = out.appendingPathComponent(name.replacingOccurrences(of: "-light", with: suffix + "-light").replacingOccurrences(of: "-dark", with: suffix + "-dark") + ".png")
         do {
             let image = try await webView.takeSnapshot(configuration: configuration)
@@ -425,7 +463,7 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
         // A real engine writes the expiry with a fraction of a second.
         let stamp = ISO8601DateFormatter()
         stamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let expires = stamp.string(from: Date().addingTimeInterval(play.planLife)).replacingOccurrences(of: "Z", with: "081Z")
+        let expires = stamp.string(from: Date().addingTimeInterval(ahead + 570)).replacingOccurrences(of: "Z", with: "081Z")
         var lines = answering(section, id)
         lines[0] = lines[0].replacingOccurrences(of: "\"expires_at\":\"[^\"]*\"", with: "\"expires_at\":\"\(expires)\"", options: .regularExpression)
         if !lines[0].contains(expires) { fail("the recorded plan has no expires_at to set") }
@@ -470,6 +508,23 @@ struct Scenario {
 @MainActor func results(_ r: Run) async {
     r.same(await r.screen(), "findings", "the screen")
     r.same(await r.phase(), "done", "the scan's phase")
+}
+
+/// What DESIGN.md fixes in numbers, read back from the drawn page: `[selector, property]` against a value.
+/// A property starting with `#` is the element's own box: its height, or how far its right edge is from
+/// the window's.
+@MainActor func drawn(_ r: Run, _ wants: [(String, String, String)]) async {
+    for (selector, property, want) in wants {
+        let got = await r.js("""
+            const el = document.querySelector(selector);
+            if (!el) return 'no such element';
+            if (property === '#height') return String(el.getBoundingClientRect().height);
+            if (property === '#right') return String(innerWidth - el.getBoundingClientRect().right);
+            const style = getComputedStyle(el);
+            return property === 'font-family' ? style.fontFamily.split(',')[0] : style.getPropertyValue(property);
+            """, ["selector": selector, "property": property]) as? String ?? ""
+        r.same(got, want, "\(selector) \(property)")
+    }
 }
 
 /// Ticks every row, so the plan is the transcript's plan of everything.
@@ -568,6 +623,32 @@ struct Scenario {
             r.expect(await r.flag("return getComputedStyle(document.body).webkitUserSelect === 'none'"), "the page's text can be selected")
             let paper = await r.paper()
             await r.shoot()
+
+            if windowSize.width == 900 {
+                await drawn(r, [
+                    (".top", "#height", "42"), (".tray", "#height", "60"), (".page", "padding-left", "32px"), (".entry", "#right", "32"), (".top button", "#right", "32"), (".tray .btn", "#right", "32"),
+                    (".top h1", "font-family", "ui-serif"), (".top h1", "font-size", "17px"), (".top h1", "font-weight", "600"),
+                    (".lead h2", "font-family", "ui-serif"), (".lead h2", "font-size", "23px"), (".lead h2", "font-weight", "600"),
+                    (".sec h3", "font-family", "ui-serif"), (".sec h3", "font-size", "17px"), (".sec h3", "font-weight", "600"),
+                    (".entry h4", "font-family", "ui-serif"), (".entry h4", "font-size", "16px"), (".entry h4", "font-weight", "600"),
+                    (".entry .story", "font-family", "ui-serif"), (".entry .story", "font-size", "14px"), (".entry .story", "font-weight", "400"),
+                    ("body", "font-family", "system-ui"), ("body", "font-size", "13px"),
+                    (".entry .cost", "font-size", "12.5px"), (".apart", "font-size", "12px"),
+                    (".four b", "font-size", "20px"), (".four b", "font-weight", "650"), (".four b", "font-variant-numeric", "tabular-nums"),
+                    (".side b", "font-size", "15px"), (".side b", "font-weight", "650"), (".side b", "font-variant-numeric", "tabular-nums"),
+                    (".btn", "font-size", "13.5px"), (".btn", "font-weight", "650"), (".btn", "border-top-left-radius", "8px"),
+                    (".entry", "grid-template-columns", "28px 562px 246px"), (".side", "grid-template-columns", "148px 88px"), (".side", "column-gap", "10px"),
+                    (".bar", "#height", "6"), (".four .rule", "#height", "4"), (".meter", "#height", "6"), (".meter", "column-gap", "2px"),
+                    (".entry", "border-bottom-width", "1px"), (".sec > header", "border-bottom-width", "1px"), (".tray", "border-top-width", "1px"),
+                    (".entry .cost .mono", "font-size", "12px"), (".entry .cost .mono", "font-family", "ui-monospace"),
+                ])
+                // All bars share one scale: a full bar is the largest row.
+                let widths = await r.js("return [...document.querySelectorAll('.entry .bar i')].map((el) => el.getBoundingClientRect().width / el.parentElement.getBoundingClientRect().width)") as? [Double] ?? []
+                let exclusive = t.event("scan", "summary").obj("exclusive")
+                let own = { (rule: String) -> Double in Double(exclusive.filter { $0.key.hasPrefix(rule + "/") }.reduce(Int64(0)) { $0 + exclusive.int($1.key) }) }
+                let largest = t.rows("scan").map { own($0.obj("finding").obj("rule").str("id")) }.max() ?? 1
+                r.expect(abs((widths.first ?? 0) - own("node-modules-dirs") / largest) < 0.002, "the first bar is not drawn on the scale of the largest finding: \(widths.first ?? 0)")
+            }
 
             // data-theme on <html> overrides the system theme.
             await r.js("document.documentElement.dataset.theme = paper.startsWith('rgb(2') ? 'dark' : 'light'; return null", ["paper": paper])
@@ -686,6 +767,13 @@ struct Scenario {
             let last = actions.reversed().prefix { $0.str("rule_id") == order.last }.count
             r.same(await r.texts(".act .seq").last ?? "", last > 1 ? "\(actions.count - last + 1)–\(actions.count)" : "\(actions.count)", "the last group's numbers")
             r.has(await r.text(".tray .say"), "in the next 10 minutes", "how long the plan can run")
+            if windowSize.width == 900 {
+                await drawn(r, [
+                    (".act:not(.skip)", "grid-template-columns", "44px 546px 246px"), (".act h4", "font-family", "ui-serif"), (".act h4", "font-size", "15px"),
+                    (".act .ln", "font-family", "ui-monospace"), (".act .ln", "font-size", "12px"), (".act .ln", "-webkit-user-select", "text"),
+                    (".lead .say", "font-family", "ui-serif"), (".act .side b", "font-size", "14px"),
+                ])
+            }
             r.expect(!(await r.text(".page")).contains(NSHomeDirectory()), "a path on the plan is not written under ~")
             await r.shoot()
             // A group opens to each of its commands, so each can be read before it is confirmed.
@@ -694,32 +782,31 @@ struct Scenario {
             r.has(await r.text("\(group) [data-do=open]"), "and \(moves.count - 1) more like it", "the folded group")
             await r.click("\(group) [data-do=open]")
             r.same(await r.count("\(group) .ln"), moves.count, "the lines of an opened group")
-            r.same(await r.js("return document.querySelector('\(group) .ln .sel').title") as? String ?? "", moves[0].strs("command").map { $0.contains(" ") || $0.contains("\"") ? String(reflecting: $0) : $0 }.joined(separator: " "), "the exact command in the title")
+            r.same(await r.js("return document.querySelector('\(group) .ln [title]').title") as? String ?? "", moves[0].strs("command").map { $0.contains(" ") || $0.contains("\"") ? String(reflecting: $0) : $0 }.joined(separator: " "), "the exact command in the title")
             r.same(r.sent("execute").count, 0, "executes from the plan")
         },
-        Scenario(name: "plan-expired", play: Play(planLife: 4)) { r in
+        Scenario(name: "plan-expired") { r in
             await toConfirm(r)
             await r.click("#read")
             r.expect(!(await r.flag("return document.getElementById('go').disabled")), "the run button is locked on a plan that can still run")
             // The plan's time runs out under the confirm step: the page goes back to the plan by itself.
-            await r.sleep(4.2)
-            await r.settle()
-            r.same(await r.screen(), "plan", "the screen once the plan is too old")
+            await r.jump(minutes: 11)
+            await r.wait(for: "the page leaving the confirm step once the plan is too old", "document.documentElement.dataset.screen === 'plan'")
             r.same(await r.text(".tray .btn:not(.quiet)"), "Plan again", "the tray's action once the plan is too old")
             r.same(await r.count("[data-do=confirm], [data-do=run], #go"), 0, "ways to run a plan that is too old")
             r.has(await r.text(".tray .say"), "too old to run", "the tray")
             await r.shoot()
-            r.play.planLife = 570
             await r.click("[data-do=again]")
             r.same(r.sent("execute").count, 0, "executes of a plan that is too old")
             r.same(await r.text(".tray .btn:not(.quiet)"), "Run plan…", "the tray's action on the fresh plan")
         },
-        Scenario(name: "expired-click", play: Play(planLife: 4, clockStops: true)) { r in
-            // The page's clock is stopped, so only the click's own check can know the plan is too old.
+        Scenario(name: "expired-click", play: Play(clockStops: true)) { r in
+            // The page's timers are stopped, so only the click's own check can know the plan is too old.
             await toConfirm(r)
             await r.click("#read")
-            await r.sleep(4.2)
-            r.same(await r.screen(), "confirm", "the screen with the page's clock stopped")
+            await r.jump(minutes: 11)
+            r.same(await r.screen(), "confirm", "the screen with the page's timers stopped")
+            r.expect(!(await r.flag("return document.getElementById('go').disabled")), "the run button was redrawn with the page's timers stopped")
             await r.click("#go")
             r.same(r.sent("execute").count, 0, "executes of a plan that ran out before the click")
             r.same(await r.screen(), "plan", "the screen after a click on a plan that is too old")
@@ -731,11 +818,11 @@ struct Scenario {
             r.same(r.sentShell("automation"), 1, "automation questions on entering the confirm step")
             r.has(await r.text(".ask dl"), "Asking macOS whether regrow may control Finder", "the Trash line while the answer is out")
             let tries: @MainActor () async -> Void = {
-                await r.click("#go", quiet: 0.1)
-                await r.click("#go", force: true, quiet: 0.1)
+                await r.click("#go")
+                await r.click("#go", force: true)
                 for target in ["#read", "#go", "body"] {
                     await r.focus(target)
-                    await r.pressReturn(quiet: 0.1)
+                    await r.pressReturn()
                 }
             }
             await tries()
@@ -753,6 +840,12 @@ struct Scenario {
             r.same(await r.text(".ask h2"), "Run \(actions.count) actions?", "the question")
             r.has(await r.text(".gate label"), "I read the \(actions.filter { $0.str("kind") != "trash" }.count) commands. They have no undo.", "the tick box's sentence")
             r.has(await r.text(".ask dl"), "empties the Trash", "the line on the command that empties the Trash")
+            if windowSize.width == 900 {
+                await drawn(r, [
+                    (".ask", "max-width", "560px"), (".ask h2", "font-size", "28px"), (".ask h2", "font-family", "ui-serif"),
+                    (".btn.run", "border-top-left-radius", "8px"), (".top .status", "#height", "0"),
+                ])
+            }
             await r.shoot()
         },
         Scenario(name: "confirm-ready", play: Play(executeStops: true)) { r in
@@ -763,7 +856,7 @@ struct Scenario {
             // Return does nothing here, wherever the focus is; a real Return on this button would otherwise press it.
             for target in ["#read", "#go", "body"] {
                 await r.focus(target)
-                await r.pressReturn(quiet: 0.15)
+                await r.pressReturn()
             }
             r.same(r.sent("execute").count, 0, "executes sent by Return")
             r.same(await r.screen(), "confirm", "the screen after Return")
@@ -947,8 +1040,8 @@ struct Scenario {
     let page = URL(fileURLWithPath: arguments[1]), out = URL(fileURLWithPath: arguments[3], isDirectory: true)
     try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
     var failures: [String] = [], checks = 0, shots = 0
-    let only = ProcessInfo.processInfo.environment["PAGECHECK_ONLY"]?.split(separator: ",").map(String.init)
-    let chosen = scenarios.filter { only?.contains($0.name) ?? true }
+    let only = (ProcessInfo.processInfo.environment["PAGECHECK_ONLY"] ?? "").split(separator: ",").map(String.init)
+    let chosen = scenarios.filter { only.isEmpty || only.contains($0.name) }
     for scenario in chosen {
         let run = Run(name: scenario.name, dark: scenario.dark, transcript: transcript, out: out, play: scenario.play)
         await run.load(page)
@@ -972,7 +1065,7 @@ setvbuf(stdout, nil, _IOLBF, 0)
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 Task { @MainActor in exit(await runAll()) }
-DispatchQueue.main.asyncAfter(deadline: .now() + 300) {
+DispatchQueue.main.asyncAfter(deadline: .now() + 900) {
     print("pagecheck: timed out")
     exit(2)
 }
