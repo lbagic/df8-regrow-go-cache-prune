@@ -38,6 +38,8 @@ public struct Router {
 
     private var up = false
     private var inFlight: Request?
+    /// The request in flight was sent by a page that has since gone.
+    private var orphaned = false
     private var waiting: [Request] = []
     /// `plan` and `cancel` sent while no engine was up.
     private var parked: [Request] = []
@@ -79,7 +81,7 @@ public struct Router {
         }
         // The slot is released by the id of the request in flight, so
         // no other request may carry that id meanwhile.
-        guard !holds(id) else {
+        guard !holds(id, type: type) else {
             return [.page(Self.error(re: id, code: "bad_request", message: "request id \(id) is still in use"))]
         }
         guard let line = Wire.line(fields) else {
@@ -108,9 +110,14 @@ public struct Router {
             parked = []
             return outputs + sendNext()
         }
-        var outputs: [Output] = [(head.re ?? "").hasPrefix(Self.shellPrefix) ? .shell(line) : .page(line)]
-        if head.isTerminal, let re = head.re, re == inFlight?.id {
+        let answersInFlight = head.re != nil && head.re == inFlight?.id
+        var outputs: [Output] = []
+        if !(answersInFlight && orphaned) {
+            outputs.append((head.re ?? "").hasPrefix(Self.shellPrefix) ? .shell(line) : .page(line))
+        }
+        if head.isTerminal, answersInFlight {
             inFlight = nil
+            orphaned = false
             outputs += sendNext()
         }
         return outputs
@@ -120,6 +127,7 @@ public struct Router {
     public mutating func engineExited(message: String) -> [Output] {
         up = false
         inFlight = nil
+        orphaned = false
         waiting = []
         parked = []
         let line = Self.shellEvent("engine_down", ["message": message])
@@ -128,13 +136,14 @@ public struct Router {
 
     /// The page has gone: what it had waiting is dropped and its scan
     /// in flight is canceled. An execute in flight runs on; its journal
-    /// is in the oplog.
+    /// is in the oplog. What still answers either reaches no page: a
+    /// page opened later did not ask for it.
     public mutating func pageClosed() -> [Output] {
         waiting.removeAll { $0.origin == .page }
         parked.removeAll { $0.origin == .page }
-        guard up, let running = inFlight, running.origin == .page, running.type == "scan" else {
-            return []
-        }
+        guard up, let running = inFlight, running.origin == .page else { return [] }
+        orphaned = true
+        guard running.type == "scan" else { return [] }
         serial += 1
         let cancel: [String: Any] = ["type": "cancel", "id": "\(Self.shellPrefix)cancel-\(serial)", "target": running.id]
         return [.engine(Wire.line(cancel)!)]
@@ -155,8 +164,11 @@ public struct Router {
             target: fields["target"] as? String, planID: fields["plan_id"] as? String)
     }
 
-    private func holds(_ id: String) -> Bool {
-        inFlight?.id == id || waiting.contains { $0.id == id } || parked.contains { $0.id == id }
+    /// A scan, execute or tick may reuse the id of a request a page
+    /// left in flight: it is not sent before that one has ended.
+    private func holds(_ id: String, type: String) -> Bool {
+        let inFlightHolds = inFlight?.id == id && !(orphaned && Self.slotTypes.contains(type))
+        return inFlightHolds || waiting.contains { $0.id == id } || parked.contains { $0.id == id }
     }
 
     private mutating func submit(_ request: Request) -> [Output] {

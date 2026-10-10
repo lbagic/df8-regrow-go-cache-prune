@@ -265,14 +265,36 @@ struct RouterTests {
         ])
 
         let done = #"{"event":"done","re":"s1","elapsed_ms":3,"canceled":true}"#
-        #expect(engine(&router, done) == [.page(done)])
+        #expect(engine(&router, done) == [])
     }
 
-    @Test("an execute in flight is left to finish when the page closes")
+    @Test("an execute in flight is left to finish when the page closes; what answers it reaches no later page, and its end frees the slot")
     func pageClosedDuringExecute() {
         var router = started()
         _ = page(&router, ["type": "execute", "id": "x1", "plan_id": "p-1"])
         #expect(router.pageClosed() == [])
         #expect(router.executeInFlight)
+
+        _ = router.shellRequest(tick("shell-tick-1"))
+        #expect(engine(&router, #"{"event":"journal","re":"x1","entry":{"seq":1}}"#) == [])
+        #expect(engine(&router, #"{"event":"done","re":"x1","result":{},"canceled":false}"#) == [
+            .engine(#"{"autotrim":false,"id":"shell-tick-1","type":"tick"}"#)
+        ])
+        #expect(!router.executeInFlight)
+    }
+
+    @Test("a page opened later may reuse the id of a scan the earlier page left in flight: it waits for that one's end")
+    func idReusedAfterThePageClosed() {
+        var router = started()
+        _ = page(&router, ["type": "scan", "id": "s1"])
+        _ = router.pageClosed()
+
+        #expect(page(&router, ["type": "scan", "id": "s1"]) == [])
+        #expect(refusal(page(&router, ["type": "plan", "id": "s1", "scan_id": "a-1"]))?.code == "bad_request")
+
+        let canceled = #"{"event":"done","re":"s1","elapsed_ms":3,"canceled":true}"#
+        #expect(engine(&router, canceled) == [.engine(#"{"id":"s1","type":"scan"}"#)])
+        let finding = #"{"event":"finding","re":"s1","scan_id":"a-2","index":0}"#
+        #expect(engine(&router, finding) == [.page(finding)])
     }
 }
