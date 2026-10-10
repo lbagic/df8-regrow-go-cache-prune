@@ -68,6 +68,14 @@ exe_of() {
 	ps -o comm= -p "$1" 2>/dev/null || true
 }
 
+# Signals pid only while it still runs the executable given: a pid that has
+# gone may have passed to another program.
+signal_if() {
+	if [ "$(exe_of "$1")" = "$2" ]; then
+		kill "-$3" "$1" 2>/dev/null || true
+	fi
+}
+
 # Waits until pid is gone or limit seconds pass; fails when it is still there.
 gone_within() {
 	n=0
@@ -99,11 +107,12 @@ stop_running() {
 	if [ -n "$engine_pid" ] && [ "$(exe_of "$engine_pid")" = "$DEST/Contents/MacOS/regrow-engine" ]; then
 		if ! gone_within "$engine_pid" "$QUIT_LIMIT"; then
 			echo "The engine (pid $engine_pid) is still running an action after ${QUIT_LIMIT}s; stopping it."
-			kill -TERM "$engine_pid" 2>/dev/null || true
+			engine="$DEST/Contents/MacOS/regrow-engine"
+			signal_if "$engine_pid" "$engine" TERM
 			if ! gone_within "$engine_pid" 5; then
 				# The engine dies at once on its second SIGTERM.
-				kill -TERM "$engine_pid" 2>/dev/null || true
-				gone_within "$engine_pid" 2 || kill -KILL "$engine_pid" 2>/dev/null || true
+				signal_if "$engine_pid" "$engine" TERM
+				gone_within "$engine_pid" 2 || signal_if "$engine_pid" "$engine" KILL
 			fi
 		fi
 	fi

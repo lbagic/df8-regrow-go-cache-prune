@@ -54,4 +54,5 @@ Both smoke checks start the installed app through LaunchServices, so the grants 
 - The first tick on an empty history counts a line free space is already under as crossed, so a state directory with no history and under 50 GiB free posts "Disk space is low" once.
 - With autotrim on and its gate locked, the menu says why under the switch. Once free space is low enough that a prune would have run, the tick ends in an error instead: the menu reads "Autotrim did not run", and the notification comes once, not with every tick.
 - A second copy of the app started on the same state directory quits at once.
-- Quitting while a plan runs waits up to 30 s for the action in flight, then stops the engine.
+- Quitting while a plan runs waits up to 30 s for the action in flight, then stops the engine. A steward command the engine had started runs on to its end, and the oplog then lacks that action's end.
+- `just app` finds the running app through the pid file in the state directory its own terminal names; an app whose login shell set another `XDG_STATE_HOME` is not stopped first.
