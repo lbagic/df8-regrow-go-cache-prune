@@ -76,6 +76,13 @@ type Server struct {
 	// this engine's catalog (--rules-dir, --beta-rules); sudo skips
 	// name them.
 	CleanFlags []string
+	// Self is how the owner starts this engine's binary in Terminal;
+	// sudo skips name it. Empty means `regrow`.
+	Self string
+	// LookPath finds a steward command's program, in the shape of
+	// exec.LookPath: a plan skips an action whose program it does not
+	// find. Nil plans without looking.
+	LookPath func(file string) (string, error)
 
 	exitGrace time.Duration
 	moveLimit time.Duration
@@ -419,7 +426,9 @@ func (s *session) plan(req request) {
 		atoms = append(atoms, atom)
 	}
 	sort.Strings(atoms)
-	plan := engine.BuildPlanWith(s.srv.Host, sc.findings, selected, engine.PlanOptions{NoSudo: true, CleanFlags: s.srv.CleanFlags})
+	plan := engine.BuildPlanWith(s.srv.Host, sc.findings, selected, engine.PlanOptions{
+		NoSudo: true, CleanFlags: s.srv.CleanFlags, Self: s.srv.Self, LookPath: s.srv.LookPath,
+	})
 	if len(plan.Unmatched) > 0 {
 		// As `regrow clean` does: a typo must never run less, or for a
 		// rule atom more, than the peer meant.

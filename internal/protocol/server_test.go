@@ -319,6 +319,51 @@ func TestPlanSelection(t *testing.T) {
 	}
 }
 
+// The engine face passes its own name and its program lookup to the
+// planner: a sudo skip names this engine, and an action whose program
+// is missing is a skip, not an action that fails when run.
+func TestPlanSkipsNameThisEngineAndMissingPrograms(t *testing.T) {
+	m := newMachine(t)
+	item := func(name string, bytes int64) []engine.Item {
+		return []engine.Item{{Path: filepath.Join(m.home, "proj", name), Bytes: bytes}}
+	}
+	extra := []engine.Finding{
+		{Rule: engine.Rule{ID: "fixture-sudo", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}, Sudo: true}, Items: item("system", 7)},
+		{Rule: engine.Rule{ID: "fixture-gone", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"gone-tool", "clean"}}, Items: item("gone", 11)},
+		{Rule: engine.Rule{ID: "fixture-here", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe", "--all"}}, Items: item("here", 13)},
+	}
+	srv := m.server()
+	for _, f := range extra {
+		srv.Catalog = append(srv.Catalog, f.Rule)
+	}
+	srv.Scan = scanOf(append(m.findings(), extra...))
+	srv.Self = "/Users/dev/Applications/Fixture App.app/Contents/MacOS/regrow-engine"
+	srv.CleanFlags = []string{"--beta-rules"}
+	srv.LookPath = func(file string) (string, error) {
+		if file == "gone-tool" {
+			return "", errors.New("executable file not found in $PATH")
+		}
+		return "/fixture/bin/" + file, nil
+	}
+	p := start(t, srv)
+	p.expect("hello")
+
+	e := p.planned("p", p.scanned("s", 5), "")
+	if got := actionRules(e.Plan); got != "fixture-cache,fixture-here" {
+		t.Errorf("actions = %q, want the Trash move and the command whose program was found", got)
+	}
+	want := []engine.Skip{
+		{RuleID: "fixture-sudo", Reason: "needs administrator rights — run `'/Users/dev/Applications/Fixture App.app/Contents/MacOS/regrow-engine' clean --beta-rules fixture-sudo` in Terminal"},
+		{RuleID: "fixture-gone", Reason: "`gone-tool` is not on the PATH regrow was started with"},
+	}
+	if !sameJSON(t, e.Plan.Skipped, want) {
+		t.Errorf("skipped = %+v, want %+v", e.Plan.Skipped, want)
+	}
+	if *e.Totals != (engine.Totals{FreesNow: 13, AfterTrash: 100}) {
+		t.Errorf("totals = %+v: a skip adds nothing", *e.Totals)
+	}
+}
+
 func TestPlanIsSingleUse(t *testing.T) {
 	m := newMachine(t)
 	p := start(t, m.server())

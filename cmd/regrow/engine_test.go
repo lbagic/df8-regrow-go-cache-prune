@@ -124,6 +124,50 @@ func TestCleanFlagsLoadTheSameCatalogFromTerminal(t *testing.T) {
 	}
 }
 
+func TestEngineSelfIsRegrowOnlyWhenPATHHasThisFile(t *testing.T) {
+	bundle, bin, other := t.TempDir(), t.TempDir(), t.TempDir()
+	self := filepath.Join(bundle, "regrow-engine")
+	stranger := filepath.Join(other, "regrow")
+	for _, f := range []string{self, stranger} {
+		if err := os.WriteFile(f, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	linked := filepath.Join(bin, "regrow")
+	if err := os.Symlink(self, linked); err != nil {
+		t.Fatal(err)
+	}
+	executable := func() (string, error) { return self, nil }
+	found := func(path string) func(string) (string, error) {
+		return func(name string) (string, error) {
+			if name != "regrow" {
+				t.Errorf("looked up %q, want regrow", name)
+			}
+			return path, nil
+		}
+	}
+	missing := func(string) (string, error) { return "", exec.ErrNotFound }
+
+	tests := []struct {
+		name       string
+		executable func() (string, error)
+		lookPath   func(string) (string, error)
+		want       string
+	}{
+		{"regrow on PATH is a link to this file", executable, found(linked), "regrow"},
+		{"regrow on PATH is this file", executable, found(self), "regrow"},
+		{"regrow on PATH is another binary", executable, found(stranger), self},
+		{"no regrow on PATH", executable, missing, self},
+		{"regrow on PATH no longer exists", executable, found(filepath.Join(bin, "gone")), self},
+		{"the executable is unknown", func() (string, error) { return "", os.ErrNotExist }, missing, "regrow"},
+	}
+	for _, tt := range tests {
+		if got := engineSelf(tt.executable, tt.lookPath); got != tt.want {
+			t.Errorf("%s: engineSelf = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 // A stand-in docker on PATH: the export's reason must reach the error
 // the journal records, and its stdout the tarball.
 func TestDockerStreamCapturesTheExportsStderr(t *testing.T) {
