@@ -514,3 +514,86 @@ func TestBuildPlanWithNoSudo(t *testing.T) {
 		}
 	}
 }
+
+func TestSelectable(t *testing.T) {
+	read := func(key string) Item { return Item{Path: "/Users/t/" + key, Key: key, Bytes: 1} }
+	unreadable := func(key string) Item { return Item{Path: "/Users/t/" + key, Key: key, Partial: true} }
+	lowerBound := Item{Path: "/Users/t/lb", Key: "lb", Bytes: 7, Partial: true}
+	marker := Item{Label: "folders under ~/src", Key: "folders under ~/src", Partial: true}
+	wipe := Argv{"wipe-cache"}
+	perItem := Argv{"tool", "rm", "{arg}"}
+	tests := []struct {
+		name string
+		f    Finding
+		want []string
+	}{
+		{"surface-only is never ticked", Finding{Rule: Rule{ID: "r", Risk: RiskSurfaceOnly}, Items: []Item{read("a")}}, nil},
+		{"a rule that found nothing", Finding{Rule: Rule{ID: "r", Risk: RiskSafe}}, nil},
+		{"a rule that failed", Finding{Rule: Rule{ID: "r", Risk: RiskSafe}, Items: []Item{read("a")}, Err: "tool gave no answer"}, nil},
+		{"Trash items are picked one by one", Finding{Rule: Rule{ID: "r", Risk: RiskCaution}, Items: []Item{read("a"), read("b")}},
+			[]string{"r/a", "r/b"}},
+		{"a per-item command's items too", Finding{Rule: Rule{ID: "r", Risk: RiskCaution, ToolQuery: "q", NativeCommand: perItem},
+			Items: []Item{{Label: "one", Arg: "x1", Key: "x1", Bytes: 1}, {Label: "two", Arg: "x2", Key: "x2", Bytes: 2}}},
+			[]string{"r/x1", "r/x2"}},
+		{"unreadable items are left out, a lower bound stays", Finding{Rule: Rule{ID: "r", Risk: RiskSafe},
+			Items: []Item{read("a"), unreadable("b"), lowerBound, marker}}, []string{"r/a", "r/lb"}},
+		{"nothing read, nothing to tick", Finding{Rule: Rule{ID: "r", Risk: RiskSafe}, Items: []Item{unreadable("a"), marker}}, nil},
+		{"items that share an id are one atom", Finding{Rule: Rule{ID: "r", Risk: RiskSafe}, Items: []Item{read("a"), read("a"), read("b")}},
+			[]string{"r/a", "r/b"}},
+		{"a whole-rule command read in full is the rule", Finding{Rule: Rule{ID: "r", Risk: RiskSafe, NativeCommand: wipe},
+			Items: []Item{read("a"), lowerBound}}, []string{"r"}},
+		{"a whole-rule command cannot leave an unreadable item alone", Finding{Rule: Rule{ID: "r", Risk: RiskSafe, NativeCommand: wipe},
+			Items: []Item{read("a"), unreadable("b")}}, nil},
+		{"keyless items read in full are the rule", Finding{Rule: Rule{ID: "r", Risk: RiskSafe},
+			Items: []Item{{Path: "/Users/t/j", Bytes: 1}, {Path: "/Users/t/k", Bytes: 2}}}, []string{"r"}},
+		{"keyless items with one unreadable form no atom", Finding{Rule: Rule{ID: "r", Risk: RiskSafe},
+			Items: []Item{{Path: "/Users/t/j", Bytes: 1}, {Path: "/Users/t/k", Partial: true}}}, nil},
+	}
+	for _, tt := range tests {
+		if got := Selectable(tt.f); !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%s: Selectable = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// What a face pre-ticks from Selectable is what DefaultSelection plans:
+// over safe findings the two give the same plan.
+func TestSelectableOverSafeFindingsPlansTheDefaultSelection(t *testing.T) {
+	read := func(key string) Item { return Item{Path: "/Users/t/" + key, Key: "~/" + key, Bytes: 1} }
+	unreadable := func(key string) Item { return Item{Path: "/Users/t/" + key, Key: "~/" + key, Partial: true} }
+	wipe := Argv{"wipe-cache"}
+	findings := []Finding{
+		{Rule: Rule{ID: "trash-read", Risk: RiskSafe}, Items: []Item{read("a"), read("b")}},
+		{Rule: Rule{ID: "whole-read", Risk: RiskSafe, NativeCommand: wipe}, Items: []Item{read("c"), read("d")}},
+		{Rule: Rule{ID: "item-read", Risk: RiskSafe, NativeCommand: Argv{"tool", "rm", "{path}"}}, Items: []Item{read("e"), read("f")}},
+		{Rule: Rule{ID: "trash-mixed", Risk: RiskSafe}, Items: []Item{read("g"), unreadable("h"),
+			{Label: "folders under ~/src", Key: "folders under ~/src", Partial: true}}},
+		{Rule: Rule{ID: "item-mixed", Risk: RiskSafe, NativeCommand: Argv{"tool", "rm", "{path}"}}, Items: []Item{unreadable("i"), read("j")}},
+		{Rule: Rule{ID: "whole-mixed", Risk: RiskSafe, NativeCommand: wipe}, Items: []Item{read("k"), unreadable("l")}},
+		{Rule: Rule{ID: "keyless-read", Risk: RiskSafe}, Items: []Item{{Path: "/Users/t/m", Bytes: 1}, {Path: "/Users/t/n", Bytes: 2}}},
+		{Rule: Rule{ID: "keyless-mixed", Risk: RiskSafe}, Items: []Item{{Path: "/Users/t/o", Bytes: 1}, {Path: "/Users/t/p", Partial: true}}},
+		{Rule: Rule{ID: "all-unreadable", Risk: RiskSafe}, Items: []Item{unreadable("q")}},
+		// Inside trash-read's first item: nesting resolves the same way.
+		{Rule: Rule{ID: "nested", Risk: RiskSafe}, Items: []Item{read("a/inner")}},
+	}
+	ticked := map[string]bool{}
+	for _, f := range findings {
+		for _, atom := range Selectable(f) {
+			ticked[atom] = true
+		}
+	}
+	fromDefault := BuildPlan(testHost, findings, DefaultSelection(findings))
+	fromTicks := BuildPlan(testHost, findings, ticked)
+	if len(fromDefault.Actions) != 9 {
+		t.Fatalf("the default plan has %d actions, want 9: %+v", len(fromDefault.Actions), fromDefault.Actions)
+	}
+	if !reflect.DeepEqual(fromTicks.Actions, fromDefault.Actions) {
+		t.Errorf("actions from Selectable = %+v\nfrom DefaultSelection = %+v", fromTicks.Actions, fromDefault.Actions)
+	}
+	if !reflect.DeepEqual(fromTicks.Skipped, fromDefault.Skipped) || len(fromDefault.Skipped) != 1 {
+		t.Errorf("skips from Selectable = %+v\nfrom DefaultSelection = %+v, want the one nested item in both", fromTicks.Skipped, fromDefault.Skipped)
+	}
+	if len(fromTicks.Unmatched)+len(fromDefault.Unmatched) != 0 {
+		t.Errorf("unmatched: %v and %v", fromTicks.Unmatched, fromDefault.Unmatched)
+	}
+}

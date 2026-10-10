@@ -140,6 +140,42 @@ func DefaultSelection(findings []Finding) map[string]bool {
 	return sel
 }
 
+// Selectable is the atoms that tick f's row for a face that lets the
+// owner pick, in item order; nil when the row cannot be ticked. A rule
+// that acts per item gives the ids of the items that were read, so an
+// unreadable one can never be picked. Any other rule is all or nothing:
+// its id alone when every item was read, nil otherwise. A rule that is
+// never deleted, found nothing or failed has nothing to tick. f's items
+// carry their keys (FillItemKeys); items without one are never offered
+// one by one.
+func Selectable(f Finding) []string {
+	if !f.Rule.Risk.Actionable() || len(f.Items) == 0 || f.Err != "" {
+		return nil
+	}
+	var read []string
+	seen := map[string]bool{}
+	nRead, keyed := 0, true
+	for _, it := range f.Items {
+		if it.Unreadable() {
+			continue
+		}
+		nRead++
+		keyed = keyed && it.Key != ""
+		// Items that share an id tick together: one atom.
+		if id := ItemID(f.Rule.ID, it.Key); !seen[id] {
+			seen[id] = true
+			read = append(read, id)
+		}
+	}
+	switch {
+	case f.Rule.PerItemActionable() && nRead > 0 && keyed:
+		return read
+	case nRead == len(f.Items):
+		return []string{f.Rule.ID}
+	}
+	return nil
+}
+
 // selection is the parsed form of the atom map: whole-rule atoms and
 // per-item atoms ("ruleID/key"), kept separate so partial selections
 // are detectable.
