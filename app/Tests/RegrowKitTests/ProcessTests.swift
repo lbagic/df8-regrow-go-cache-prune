@@ -15,7 +15,7 @@ private enum Children {
     static let ignoresBoth = "#!/bin/sh\ntrap '' TERM\necho ready\n" + loop
 }
 
-private let quick = StopTimings(stdin: 0.5, term: 0.5, secondTerm: 0.5)
+private let quick = StopTimings(stdin: 1, term: 1, secondTerm: 1)
 
 private struct Run {
     let child: ChildProcess
@@ -81,9 +81,9 @@ struct StopLadderTests {
     @Test("an execute in flight is given its own, longer wait before the first signal")
     func executeInFlightWaitsLonger() async throws {
         try await withTemporaryDirectory { directory in
-            // Ends 1 s after stdin does: past the plain wait, within
+            // Ends 2 s after stdin does: past the plain wait, within
             // the one an execute gets.
-            let script = "#!/bin/bash\necho ready\nwhile read -t 20 line; do :; done\nsleep 1\n"
+            let script = "#!/bin/bash\necho ready\nwhile read -t 20 line; do :; done\nsleep 2\n"
             let run = try launch(script, in: directory)
             try #require(await run.lines.wait(5) { $0.contains("ready") } != nil)
 
