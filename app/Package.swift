@@ -8,6 +8,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "RegrowKit"),
+        .executableTarget(name: "Regrow", dependencies: ["RegrowKit"]),
         .testTarget(name: "RegrowKitTests", dependencies: ["RegrowKit"]),
     ],
     swiftLanguageModes: [.v5]
