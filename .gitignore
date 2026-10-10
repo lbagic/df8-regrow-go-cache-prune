@@ -2,6 +2,10 @@
 /regrow
 /dist/
 
+# the menubar app's build output and the local signing identity's hash
+/app/.build/
+/.signing-identity
+
 # OS noise
 .DS_Store
 
