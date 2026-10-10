@@ -42,7 +42,7 @@
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--paper); color: var(--ink); font: 13px/1.4 var(--sans);
-  display: grid; grid-template-rows: 42px minmax(0, 1fr) 60px; overflow: hidden;
+  display: grid; grid-template: 42px minmax(0, 1fr) 60px / minmax(0, 1fr); overflow: hidden;
   -webkit-font-smoothing: antialiased; cursor: default; -webkit-user-select: none;
 }
 h1, h2, h3, h4, p, dl, dd, ol { margin: 0; padding: 0; }
@@ -50,8 +50,7 @@ button { font: inherit; color: inherit; background: none; border: 0; border-radi
 svg { width: 14px; height: 14px; flex: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; height: 15px; }
-.mono { font: 12px/1.5 var(--mono); }
-.sel { -webkit-user-select: text; cursor: text; }
+.mono { font: 12px/1.5 var(--mono); -webkit-user-select: text; cursor: text; }
 .nb { white-space: nowrap; }
 .unit { font-weight: 400; color: var(--ink-2); }
 .err { color: var(--danger); overflow-wrap: anywhere; white-space: pre-wrap; }
@@ -79,7 +78,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 
 .page { overflow: auto; min-height: 0; padding: 16px 32px 22px; }
 
-/* the consequence first, the figures under it */
+/* headline, meter, figures */
 .lead h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -.012em; }
 .lead .say { font: 400 14.5px/1.5 var(--serif); margin-top: 6px; max-width: 74ch; }
 .lead .say b { font-family: var(--sans); font-size: 13.5px; font-weight: 650; }
@@ -143,7 +142,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 .entry.small h4 { font: 600 13.5px/1.35 var(--sans); }
 .entry.small .story { font: 400 12.5px/1.45 var(--sans); color: var(--ink-2); margin-top: 1px; max-width: 70ch; }
 
-/* a finding's items: the compact rows, set in under their finding */
+/* a finding's items */
 .items { grid-column: 2 / -1; margin-top: 8px; border-top: 1px solid var(--line); }
 .plain > .items { grid-column: 1 / -1; }
 .item { display: grid; grid-template-columns: 28px minmax(0, 1fr) 246px; padding: 6px 0; border-bottom: 1px solid var(--line); }
@@ -152,7 +151,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 .item > .text { padding-right: 24px; overflow-wrap: anywhere; }
 .item .meta { display: block; color: var(--ink-2); font-size: 12px; }
 
-/* a size, drawn and written, and under it when the space comes back */
+/* the size column */
 .side { display: grid; grid-template-columns: 148px 88px; column-gap: 10px; align-items: center; align-content: start; }
 .side b { grid-column: 2; text-align: right; font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .side b .unit { font-size: 12.5px; }
@@ -162,8 +161,9 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 .side .nosize { grid-column: 1 / -1; justify-self: end; display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--ink-2); }
 .small .side b, .item .side b { font-size: 13.5px; }
 
-/* the tray: three steps and the next one */
+/* the tray */
 .tray { display: flex; align-items: center; gap: 22px; padding: 0 32px; background: var(--panel); border-top: 1px solid var(--line-strong); }
+@media (max-width: 800px) { .tray { gap: 12px; } }
 .steps { display: flex; align-items: center; gap: 8px; list-style: none; font-size: 12.5px; color: var(--ink-2); }
 .steps li { display: flex; align-items: center; gap: 6px; }
 .steps li i { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); font-style: normal; font-size: 11px; font-weight: 600; }
@@ -181,7 +181,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 .btn.run { background: var(--danger); color: var(--on-danger); }
 .btn:disabled { background: var(--track); color: var(--ink-3); }
 
-/* the plan's list; a run keeps it and marks each line */
+/* the plan's list, and a run's marks on it */
 .act { display: grid; grid-template-columns: 44px minmax(0, 1fr) 246px; padding: 9px 0 10px; border-bottom: 1px solid var(--line); }
 .act > .text { padding-right: 24px; }
 .act .seq { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; }
@@ -205,7 +205,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 .act.skip p { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; }
 .act.skip .err { color: var(--danger); }
 .act.skip p .mono { color: var(--ink); }
-/* a row that arrived a moment ago, or the action that is running; after the rows, so its side padding stands */
+/* a row that arrived a moment ago, or the action that is running: after the rows, so its side padding wins */
 .fresh { --under: var(--accent-soft); background: var(--accent-soft); margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 8px; border-color: transparent; }
 .fold .fresh { margin: 0 8px 0 -6px; padding: 2px 6px; border-radius: 3px; }
 .undo { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
@@ -296,11 +296,12 @@ function newPlan(e) {
 const bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.regrow;
 const post = (message) => { if (bridge) bridge.postMessage(message); };
 
-// Requests not yet answered, by id, each with the scan it was made for.
-const asked = new Map();
+// Requests not yet answered, by id, each with the scan it was made for. The shell routes an answer by its id
+// alone, so the ids of one load of the page must not be those of another.
+const asked = new Map(), load = Date.now().toString(36);
 let serial = 0;
 function ask(type, role, fields) {
-  const id = type[0] + ++serial;
+  const id = type[0] + load + '-' + ++serial;
   asked.set(id, { role, scan: S.scan });
   post({ type, id, ...fields });
   return id;
@@ -309,16 +310,14 @@ function ask(type, role, fields) {
 const OUT_OF_DATE = { scan_spent: 1, scan_superseded: 1, scan_canceled: 1, unknown_scan: 1 };
 
 window.regrow = { receive(line) {
-  let e;
-  try { e = JSON.parse(line); } catch (err) { e = { event: 'error', message: 'a line from the app was not JSON' }; }
-  const from = asked.get(e.re);
-  if (e.event === 'done' || e.event === 'error') asked.delete(e.re);
-  // An answer about a scan that is no longer shown changes nothing; an error it has no word for is still shown.
-  if (from && from.scan !== S.scan && (e.event !== 'error' || OUT_OF_DATE[e.code])) return;
   try {
+    const e = JSON.parse(line), from = asked.get(e.re);
+    if (e.event === 'done' || e.event === 'error') asked.delete(e.re);
+    // An answer about a scan that is no longer shown changes nothing; an error it has no word for is still shown.
+    if (from && from.scan !== S.scan && (e.event !== 'error' || OUT_OF_DATE[e.code])) return;
     if (on[e.event]) on[e.event](e, from && from.scan === S.scan ? from.role : '');
   } catch (err) {
-    S.error = { message: 'the page could not read a ' + e.event + ' event: ' + err.message };
+    S.error = { message: 'the page could not read a line from the app: ' + err.message };
   }
   render();
 } };
@@ -333,7 +332,7 @@ const on = {
     if (e.state !== 'engine_down') return;
     if (S.run && !S.run.result) S.cut = { id: S.plan.id, done: S.plan.actions.filter((a) => stateOf(a).state === 'done').length, of: S.plan.actions.length };
     asked.clear();
-    clearTimeout(counting);
+    counting = clearTimeout(counting);
     S.down = e.message || 'no reason given';
   },
   headroom(e, role) { if (role === 'scan') S.scan.headroom = e; },
@@ -387,7 +386,7 @@ const on = {
 };
 
 function scan() {
-  clearTimeout(counting);
+  counting = clearTimeout(counting);
   Object.assign(S, { screen: 'findings', scan: newScan(), known: false, ticked: new Set(), tray: null, planning: false,
     plan: null, note: '', run: null, error: null, safeOpen: false, open: new Set() });
   S.scan.req = ask('scan', 'scan');
@@ -406,7 +405,8 @@ function ended(result, canceled, error) {
 }
 
 // Each change of a tick box is one plan request, sent once the clicking pauses; its answer fills the tray.
-let counting = 0, latest = '';
+// `counting` is the timer of a change not yet sent, `latest` the request whose answer counts.
+let counting, latest = '';
 function toggle(el) {
   if (!canTick()) return;
   const row = S.scan.rows[el.dataset.tick];
@@ -416,7 +416,11 @@ function toggle(el) {
   for (const a of atoms) if (all) S.ticked.delete(a); else if (a) S.ticked.add(a);
   S.tray = null;
   clearTimeout(counting);
-  counting = setTimeout(() => { latest = ask('plan', 'count', { scan_id: S.scan.id, select: [...S.ticked] }); }, 200);
+  counting = setTimeout(() => {
+    counting = 0;
+    latest = ask('plan', 'count', { scan_id: S.scan.id, select: [...S.ticked] });
+    render();
+  }, 200);
 }
 const canTick = () => !S.down && S.screen === 'findings' && !!S.scan && S.scan.phase === 'done' && S.known && !S.planning;
 
@@ -487,7 +491,7 @@ const FIRST = { // what a pre-action does before its action
   'agent-scratch-recheck': 'the session is checked again',
   'worktree-recheck': 'the worktree is checked again',
 };
-const STATE = { waiting: 'waiting', running: 'running', done: 'done', fail: 'failed', skipped: 'skipped', unrun: 'not run' };
+const STATE = (state) => ({ fail: 'failed', unrun: 'not run' }[state] || state);
 // What an unreadable row needs, as far as the engine's hello tells.
 const needs = () => (S.hello && S.hello.fda === 'denied' ? 'needs Full Disk Access' : 'could not be read');
 
@@ -573,19 +577,19 @@ function size(n, lower) {
 // A command or path may wrap at a space or after a slash, never inside a name.
 const unbroken = (s) => new Markup(String(s).split(' ').map((word) => word.split('/').map((name) => (name ? '<span class="nb">' + esc(name) + '</span>' : '')).join('/<wbr>')).join(' '));
 // A sentence of the engine's, with what it quotes in backticks set in mono.
-const sentence = (s) => new Markup(String(s).split('`').map((part, i) => (i % 2 ? '<span class="mono sel">' + unbroken(part).s + '</span>' : esc(part))).join(''));
+const sentence = (s) => new Markup(String(s).split('`').map((part, i) => (i % 2 ? '<span class="mono">' + unbroken(part).s + '</span>' : esc(part))).join(''));
 
 function bar(bytes, bucket, scale) {
   return h`<span class="bar" aria-hidden="true">${bytes > 0 ? h`<i class="${bucket}" style="width:${Math.min(100, bytes / scale * 100).toFixed(2)}%"></i>` : ''}</span>`;
 }
 
-// The disk as it stands, or as it will once `now` bytes are freed and `trash` bytes wait in the Trash.
+// The disk as it stands, or as it will once `now` bytes are freed and `trash` bytes wait in the Trash. Its
+// figures stand under it in words.
 function meter(hr, now, trash) {
   const pct = (n) => (Math.max(0, n) / hr.total * 100).toFixed(2) + '%';
   const taken = Math.max(0, hr.total - hr.free - hr.purgeable - now - trash);
-  return h`<div class="meter" role="img" aria-label="${human(taken)} taken, ${human(hr.purgeable)} purgeable, ${human(hr.free + now)} free">
-    <i class="taken" style="width:${pct(taken)}"></i>${trash ? h`<i class="after_trash" style="width:${pct(trash)}"></i>` : ''}
-    <i class="purge" style="width:${pct(hr.purgeable)}"></i>${now ? h`<i class="frees_now" style="width:${pct(now)}"></i>` : ''}<i class="free"></i></div>`;
+  return h`<div class="meter" aria-hidden="true"><i class="taken" style="width:${pct(taken)}"></i>${trash ? h`<i class="after_trash" style="width:${pct(trash)}"></i>` : ''}
+<i class="purge" style="width:${pct(hr.purgeable)}"></i>${now ? h`<i class="frees_now" style="width:${pct(now)}"></i>` : ''}<i class="free"></i></div>`;
 }
 
 // The size column of a finding or of one of its items.
@@ -604,13 +608,13 @@ const section = (title, count, right, rows, bad) => h`<section class="sec ${bad 
 function notices(all) {
   const rows = [];
   if (S.error) {
-    rows.push(h`<div class="note">${ICON.caution}<span>regrow's engine answered with an error: <span class="err mono sel">${S.error.message || S.error.code}</span></span></div>`);
+    rows.push(h`<div class="note">${ICON.caution}<span>regrow's engine answered with an error: <span class="err mono">${S.error.message || S.error.code}</span></span></div>`);
   }
   if (S.cut) {
-    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped while a plan was running: ${S.cut.done} of ${num(S.cut.of, 'action')} had been done. What went to the Trash comes back with <span class="mono sel">regrow undo ${S.cut.id}</span></span></div>`);
+    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped while a plan was running: ${S.cut.done} of ${num(S.cut.of, 'action')} had been done. What went to the Trash comes back with <span class="mono">regrow undo ${S.cut.id}</span></span></div>`);
   }
   if (all && S.env) {
-    rows.push(h`<div class="note">${ICON.caution}<span>regrow could not read your login shell's environment, so tools outside the system folders are not found: <span class="mono sel">${S.env}</span></span></div>`);
+    rows.push(h`<div class="note">${ICON.caution}<span>regrow could not read your login shell's environment, so tools outside the system folders are not found: <span class="mono">${S.env}</span></span></div>`);
   }
   if (all && S.hello && S.hello.fda === 'denied') {
     const part = S.scan.rows.filter((r) => r.items.some((it) => it.lower)).length;
@@ -642,7 +646,7 @@ function drawFindings() {
   const safe = risk('safe'), call = risk('caution'), shown = risk('');
   const draw = (v, small) => entry(v, scale, fresh.has(v.row), small);
   const atoms = safe.flatMap((v) => v.row.select || []), picked = atoms.filter((a) => S.ticked.has(a)).length;
-  const ticks = !S.known ? '' : picked === atoms.length ? ', all ticked' : ', ' + (picked ? safe.filter((v) => v.picked).length : 'none') + ' ticked';
+  const ticks = !S.known || !atoms.length ? '' : picked === atoms.length ? ', all ticked' : ', ' + (picked ? safe.filter((v) => v.picked).length : 'none') + ' ticked';
 
   return h`${lead()}${four()}${notices(true)}
     ${failed.length ? section('Not scanned', `${num(failed.length, 'rule')} ended with an error and ${failed.length === 1 ? 'is' : 'are'} in no total`, '', failed.map((v) => draw(v)), true) : ''}
@@ -688,7 +692,7 @@ function fold(safe, atoms, picked, fresh) {
 function entry(v, scale, fresh, small) {
   const row = v.row, rule = row.rule, regen = rule.regen || {};
   if (row.error) {
-    return h`<div class="entry plain" data-rule="${row.id}"><div class="text"><h4>${rule.title}</h4><p class="err mono sel">${row.error}</p></div><div class="side"><span class="when">not scanned</span></div></div>`;
+    return h`<div class="entry plain" data-rule="${row.id}"><div class="text"><h4>${rule.title}</h4><p class="err mono">${row.error}</p></div><div class="side"><span class="when">not scanned</span></div></div>`;
   }
   const open = S.open.has('r' + row.n), each = !!row.select && !row.whole;
   const kept = rule.risk !== 'safe' && rule.risk !== 'caution';
@@ -699,7 +703,7 @@ function entry(v, scale, fresh, small) {
     ${row.select ? h`<span class="chk"><input type="checkbox" id="t${row.n}" data-tick="${row.n}" aria-label="Add ${rule.title} to the plan" ${v.picked === row.select.length ? 'checked' : v.picked ? 'data-some' : ''} ${canTick() ? '' : 'disabled'}></span>` : ''}
     <div class="text"><h4>${rule.title}${count}</h4>
       ${small ? h`<p class="story">${regen.story}${v.used ? ` Last used ${ago(v.used)}.` : ''}</p>`
-        : h`<p class="story">${regen.story}</p><p class="cost">${kept ? rule.note : h`Costs: ${regen.cost}. ${runs}${row.select ? '' : ' Part of it could not be read, so it cannot be ticked.'}`}</p>`}</div>
+        : h`<p class="story">${regen.story}</p><p class="cost">${kept ? rule.note : h`Costs: ${regen.cost}. ${runs}`}</p>`}</div>
     ${side(v, row.bucket, scale, small)}
     ${open ? h`<div class="items">${v.items.map((it) => item(row, it, each, scale))}</div>` : ''}</div>`;
 }
@@ -708,7 +712,7 @@ function entry(v, scale, fresh, small) {
 function item(row, it, each, scale) {
   return h`<div class="item ${each ? '' : 'plain'}" data-id="${it.id}">
     ${each ? h`<span class="chk">${it.atom ? h`<input type="checkbox" id="t${row.n}-${it.i}" data-tick="${row.n}" data-item="${it.i}" aria-label="Add ${it.name} to the plan" ${S.ticked.has(it.atom) ? 'checked' : ''} ${canTick() ? '' : 'disabled'}>` : ''}</span>` : ''}
-    <div class="text">${it.path ? h`<span class="mono sel" title="${it.name}">${unbroken(tilde(it.name))}</span>` : it.name}
+    <div class="text">${it.path ? h`<span class="mono" title="${it.name}">${unbroken(tilde(it.name))}</span>` : it.name}
       <span class="meta">${it.blind ? needs() : it.used ? 'last used ' + ago(it.used) : 'last use not known'}</span></div>
     ${side(it, row.bucket, scale, true)}</div>`;
 }
@@ -737,12 +741,12 @@ function actions(mode) {
     const first = g.actions[0], many = g.actions.length > 1, trash = first.kind === 'trash';
     const open = mode !== 'plan' || S.open.has('g' + gi);
     const states = mode === 'plan' ? [] : g.actions.map(stateOf), kinds = [...new Set(states.map((s) => s.state))];
-    const tally = kinds.length === 1 ? STATE[kinds[0]]
-      : ['done', 'fail', 'skipped', 'running'].filter((k) => kinds.includes(k)).map((k) => (k === 'running' ? k : states.filter((s) => s.state === k).length + ' ' + STATE[k])).join(', ');
+    const tally = kinds.length === 1 ? STATE(kinds[0])
+      : ['done', 'fail', 'skipped', 'running'].filter((k) => kinds.includes(k)).map((k) => (k === 'running' ? k : states.filter((s) => s.state === k).length + ' ' + STATE(k))).join(', ');
     const more = many && mode === 'plan' ? h`<button class="link" data-do="open" data-key="g${gi}" id="g${gi}" aria-expanded="${String(open)}">${open ? 'Show only the first' : `and ${g.actions.length - 1} more like it`}</button>` : '';
     const line = (a) => {
       const st = states[a.seq - first.seq];
-      return h`<span class="ln mono" ${st ? h`data-state="${st.state}"` : ''}>${st ? ICON[st.state] || ICON.skipped : ''}<span class="sel" title="${shellJoin(a.command)}">${told(a)}</span>${open ? '' : more}${st && st.error && mode === 'running' ? h`<span class="err sel">${st.error}</span>` : ''}</span>`;
+      return h`<span class="ln mono" ${st ? h`data-state="${st.state}"` : ''}>${st ? ICON[st.state] || ICON.skipped : ''}<span title="${shellJoin(a.command)}">${told(a)}</span>${open ? '' : more}${st && st.error && mode === 'running' ? h`<span class="err">${st.error}</span>` : ''}</span>`;
     };
     return h`<div class="act ${kinds.includes('running') ? 'fresh' : ''}" data-rule="${g.rule}"><span class="seq">${many ? first.seq + '–' + (first.seq + g.actions.length - 1) : first.seq}</span>
       <div class="text"><h4>${titleOf(g.rule)}</h4>${(open ? g.actions : [first]).map(line)}${open ? more : ''}
@@ -781,17 +785,17 @@ function drawResult() {
   const trash = r.trash_bytes || 0, staged = r.staged_bytes || 0, freed = Math.max(0, (r.bytes || 0) - trash - staged);
   const moved = trash || staged || states.some(([, s]) => s.method === 'finder' || s.method === 'staging');
   return h`<section class="lead"><h2>${run.canceled ? 'Stopped' : 'The run has ended'}: ${r.done || 0} of ${num(p.actions.length, 'action')} done${r.failed ? `, ${r.failed} failed` : ''}${skipped ? `, ${skipped} skipped` : ''}.</h2>
-      ${run.error ? h`<p class="err mono sel">${run.error}</p>` : ''}
+      ${run.error ? h`<p class="err mono">${run.error}</p>` : ''}
       <p class="say">${freed ? h`<i class="sw frees_now"></i><b>${human(freed)}</b> is free now. ` : ''}${trash ? h`<i class="sw after_trash"></i><b>${human(trash)}</b> is in the Trash, and is free once you empty it. ` : ''}${staged ? h`<b>${human(staged)}</b> is in regrow staging, because Finder could not take it: emptying the Trash does not free that.` : ''}${freed || trash || staged ? '' : 'No space was freed.'}</p>
-      ${moved ? h`<p class="undo">To put back what went to the Trash${staged ? ' and to staging' : ''}:<span class="mono sel">regrow undo ${r.run_id || p.id}</span></p>` : ''}</section>
+      ${moved ? h`<p class="undo">To put back what went to the Trash${staged ? ' and to staging' : ''}:<span class="mono">regrow undo ${r.run_id || p.id}</span></p>` : ''}</section>
     ${notices(false)}
     ${failed.length ? section('Failed', `${num(failed.length, 'action')} ended with an error`, '',
-      failed.map(([a, s]) => h`<div class="act skip">${ICON.fail}<div><h4>${titleOf(a.rule_id)}</h4><span class="ln mono sel">${told(a)}</span><p class="err mono sel">${s.error}</p></div></div>`), true) : ''}
+      failed.map(([a, s]) => h`<div class="act skip">${ICON.fail}<div><h4>${titleOf(a.rule_id)}</h4><span class="ln mono">${told(a)}</span><p class="err mono">${s.error}</p></div></div>`), true) : ''}
     ${section('In the order they ran', 'what became of each action', tellActions(p), actions('result'))}`;
 }
 
 function drawDown() {
-  return h`<section class="lead"><h2>regrow's engine has stopped.</h2><p class="err mono sel">${S.down}</p>
+  return h`<section class="lead"><h2>regrow's engine has stopped.</h2><p class="err mono">${S.down}</p>
     <p class="aside">This page scans again as soon as the engine is back.</p></section>${notices(false)}`;
 }
 
@@ -856,7 +860,7 @@ function drawTray() {
 
 const SCREENS = { findings: drawFindings, plan: drawPlan, confirm: drawConfirm, running: drawRunning, result: drawResult, down: drawDown };
 const root = document.documentElement, $ = (id) => document.getElementById(id);
-let clockDrawn = '';
+let clockDrawn = '', renders = 0;
 
 function render() {
   const page = $('page'), screen = S.down ? 'down' : S.screen, at = page.scrollTop;
@@ -865,14 +869,17 @@ function render() {
   page.innerHTML = show(SCREENS[screen]());
   $('tray').innerHTML = show(drawTray());
   for (const box of page.querySelectorAll('[data-some]')) box.indeterminate = true;
+  // A scrollbar that takes room takes it from the side padding, so the rows keep their width.
+  page.style.paddingRight = 32 - (page.offsetWidth - page.clientWidth) + 'px';
   page.scrollTop = root.dataset.screen === screen ? at : 0;
   if (focus && document.querySelector(focus)) document.querySelector(focus).focus();
   if (screen === 'running' && page.querySelector('.fresh')) page.querySelector('.fresh').scrollIntoView({ block: 'nearest' });
   clockDrawn = clock();
   root.dataset.screen = screen;
   root.dataset.scan = S.scan ? S.scan.phase : '';
-  // Tells whoever drives the page that this state is on screen.
-  root.dataset.settled = Number(root.dataset.settled || 0) + 1;
+  // Tells whoever drives the page that this state is on screen, and that the page has nothing left to send
+  // by itself: it is empty while a tick-box change waits to go out.
+  root.dataset.settled = counting ? '' : ++renders;
 }
 
 // What the page says about the plan's time left; the page is drawn again only when that changes.
