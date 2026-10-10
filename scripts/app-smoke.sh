@@ -11,6 +11,9 @@
 #   scripts/app-smoke.sh alert   One watch tick against a made-up history in which
 #                                free space just fell 6 GiB: one notification
 #                                should appear.
+#
+# A check that fails leaves its directory in place and names it: the
+# app's result.json, smoke.log and engine.log are in it.
 set -eu
 
 APP="$HOME/Applications/Regrow.app"
@@ -28,8 +31,16 @@ if [ ! -d "$APP" ]; then
 fi
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/regrow-smoke.XXXXXX")
-trap 'rm -rf "${work:?}"' EXIT
 mkdir -p "$work/state/regrow"
+
+finish() {
+	if [ "$1" -eq 0 ]; then
+		rm -rf "${work:?}"
+	else
+		echo "Left for a look: $work" >&2
+	fi
+	exit "$1"
+}
 
 # The app writes result.txt: one "PASS|FAIL <stage>: <detail>" line per
 # stage, then "RESULT ok" or "RESULT failed".
@@ -46,11 +57,14 @@ if [ "$mode" = alert ]; then
 	total=$(df -k /System/Volumes/Data | awk 'NR==2 { printf "%.0f", $2 * 1024 }')
 	free=$(df -k /System/Volumes/Data | awk 'NR==2 { printf "%.0f", $4 * 1024 }')
 	before=$(awk -v f="$free" 'BEGIN { printf "%.0f", f + 6 * 1024 * 1024 * 1024 }')
-	printf '{"at":"%s","total":%s,"free":%s,"purgeable":0,"swap_used":0}\n' \
-		"$(date -u -v-10M +%Y-%m-%dT%H:%M:%SZ)" "$total" "$before" >"$work/state/regrow/headroom.jsonl"
+	# Swap as it is now, so the fall in free space is the only change.
+	swap=$(sysctl -n vm.swapusage | awk '{ printf "%.0f", $6 * 1024 * 1024 }')
+	printf '{"at":"%s","total":%s,"free":%s,"purgeable":0,"swap_used":%s}\n' \
+		"$(date -u -v-10M +%Y-%m-%dT%H:%M:%SZ)" "$total" "$before" "$swap" >"$work/state/regrow/headroom.jsonl"
 	open -n -W "$APP" --args --smoke-alert "$work"
-	report
-	exit $?
+	status=0
+	report || status=1
+	finish "$status"
 fi
 
 token="regrow smoke $$ $(date +%s)"
@@ -87,7 +101,7 @@ else
 	if [ -e "$sentinel" ]; then
 		echo "FAIL restored: $sentinel is there but its content changed. It is left as it is." >&2
 	else
-		echo "FAIL restored: $sentinel was not put back. Look for regrow-smoke-$$ in the Trash." >&2
+		echo "FAIL restored: $sentinel was not put back. It is in the Trash as regrow-smoke-$$, or under $work/state/regrow/staging." >&2
 	fi
 fi
-exit "$status"
+finish "$status"
