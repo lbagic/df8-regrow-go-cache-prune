@@ -39,6 +39,7 @@ final class Shell: ObservableObject {
     private var helloLine: String?
     private var tickLine: String?
     private var downLine: String?
+    private var lockNoticed = false
     private var stopping = false
 
     private init() {
@@ -240,11 +241,19 @@ final class Shell: ObservableObject {
             window?.deliver(line)
         case "done" where ofTick:
             tickError = nil
+            lockNoticed = false
             watch?.settled()
         case "error" where ofTick:
             tickError = head.message ?? head.code
+            // A locked gate fails every tick while headroom stays low:
+            // it is news once, not every quarter of an hour.
             if let notice = AlertText.notice(forError: head.code ?? "", message: head.message ?? "") {
-                notifier.post(notice)
+                if !lockNoticed {
+                    notifier.post(notice)
+                }
+                lockNoticed = true
+            } else {
+                lockNoticed = false
             }
             watch?.settled()
         default:
@@ -374,7 +383,7 @@ final class Shell: ObservableObject {
                 environment: ProcessInfo.processInfo.environment,
                 stdin: null, stdout: null, stderr: null, group: .session)
             log("relaunching")
-            NSApp.terminate(nil)
+            MainRunLoop.quit()
         } catch {
             log("could not relaunch: \(error)")
         }
@@ -383,7 +392,7 @@ final class Shell: ObservableObject {
     // MARK: Quit
 
     /// Runs the stop ladder on the engine, then calls `done` on the
-    /// main queue.
+    /// main thread.
     func shutdown(_ done: @escaping @MainActor () -> Void) {
         guard !stopping else { return }
         stopping = true
@@ -404,9 +413,7 @@ final class Shell: ObservableObject {
                 PidFile.remove(from: state)
             }
             log("quit")
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { done() }
-            }
+            MainRunLoop.perform(done)
         }
     }
 }

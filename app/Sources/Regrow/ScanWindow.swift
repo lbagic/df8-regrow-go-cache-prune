@@ -66,8 +66,10 @@ final class ScanWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKScri
     /// set itself up yet is dropped: the page asks for what stands when
     /// it says it is ready.
     func deliver(_ line: String) {
+        // The call returns a value because one that returns none is
+        // reported as a failure.
         webView.callAsyncJavaScript(
-            "if (window.regrow && window.regrow.receive) { window.regrow.receive(line) }",
+            "if (window.regrow && window.regrow.receive) { window.regrow.receive(line); return true } return false",
             arguments: ["line": line], in: nil, in: .page
         ) { [log] result in
             if case .failure(let error) = result {
@@ -88,7 +90,7 @@ final class ScanWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKScri
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
         let url = navigationAction.request.url
-        let isPage = url.map { $0.isFileURL && $0.standardizedFileURL.path == page.standardizedFileURL.path } ?? false
+        let isPage = url.map { $0.isFileURL && $0.resolvingSymlinksInPath().path == page.resolvingSymlinksInPath().path } ?? false
         if !firstLoadAllowed, isPage, navigationAction.targetFrame?.isMainFrame == true {
             firstLoadAllowed = true
             decisionHandler(.allow)

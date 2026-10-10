@@ -12,8 +12,10 @@ struct RegrowApp: App {
         MenuBarExtra {
             MenuView(shell: shell)
         } label: {
-            Image(systemName: "internaldrive")
-            Text(shell.barTitle)
+            HStack(spacing: 4) {
+                Image(systemName: "internaldrive")
+                Text(shell.barTitle)
+            }
         }
         .menuBarExtraStyle(.menu)
     }
@@ -75,7 +77,7 @@ struct MenuView: View {
 
         Divider()
         Button("Scan…") { shell.openScan() }
-        Button("Quit regrow") { NSApp.terminate(nil) }
+        Button("Quit regrow") { MainRunLoop.quit() }
     }
 }
 
@@ -88,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for number in [SIGTERM, SIGINT] {
             signal(number, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
-            source.setEventHandler { NSApp.terminate(nil) }
+            source.setEventHandler { MainRunLoop.quit() }
             source.resume()
             signals.append(source)
         }
