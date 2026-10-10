@@ -89,6 +89,13 @@ public final class EngineSupervisor: @unchecked Sendable {
         return child?.pid
     }
 
+    /// False once the engine has gone, and before one was started.
+    public var isRunning: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return child?.isRunning ?? false
+    }
+
     public func send(_ line: String) {
         lock.lock()
         let child = self.child

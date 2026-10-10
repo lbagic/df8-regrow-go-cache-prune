@@ -91,12 +91,16 @@ public struct Router {
         return submit(request(type: type, id: id, line: line, origin: .page, fields: fields))
     }
 
-    /// One line of the engine's stdout.
+    /// One line of the engine's stdout. A line that is no event is
+    /// dropped.
     public mutating func engineLine(_ data: Data) -> [Output] {
-        guard let head = Wire.decode(Wire.Head.self, from: data), let event = head.event else {
-            return []
-        }
-        let line = String(decoding: data, as: UTF8.self)
+        guard let head = Wire.decode(Wire.Head.self, from: data) else { return [] }
+        return engineEvent(head, line: String(decoding: data, as: UTF8.self))
+    }
+
+    /// The same, for a caller that has already read the line's head.
+    public mutating func engineEvent(_ head: Wire.Head, line: String) -> [Output] {
+        guard let event = head.event else { return [] }
         if event == "hello" {
             up = true
             var outputs: [Output] = [.shell(line), .page(line)]

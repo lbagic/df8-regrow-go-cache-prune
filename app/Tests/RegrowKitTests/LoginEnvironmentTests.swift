@@ -80,21 +80,51 @@ struct LoginEnvironmentTests {
         }
     }
 
+    @Test("zsh and bash give up their environment as login, interactive shells with no terminal", arguments: [
+        "/bin/zsh", "/bin/bash",
+    ])
+    func systemShells(binary: String) async throws {
+        try await withTemporaryDirectory { directory in
+            // The system's own shell with an empty home in the temp
+            // dir, so no profile of the user's is read.
+            let home = directory.appendingPathComponent("home")
+            try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+            let shell = try writeScript(
+                """
+                #!/bin/sh
+                exec /usr/bin/env -i HOME="\(home.path)" ZDOTDIR="\(home.path)" REGROW_TEST_SHELL=1 \(binary) "$@"
+                """, named: "shell", in: directory)
+
+            let environment = try await offThread { LoginEnvironment.capture(shell: shell, timeout: 10) }.get()
+            #expect(environment["HOME"] == home.path)
+            #expect(environment["REGROW_TEST_SHELL"] == "1")
+            #expect(environment["PATH"]?.contains("/usr/bin") == true)
+        }
+    }
+
     @Test("a shell that never finishes is killed with its children after the timeout, and the failure says why")
     func timesOut() async throws {
         try await withTemporaryDirectory { directory in
             let shell = try writeScript(
                 """
                 #!/bin/sh
+                [ "$1" = -l ] || exit 0
                 sleep 20 &
                 echo $! > "$(dirname "$0")/child.pid"
                 wait
                 """, named: "shell", in: directory)
+            // The first run of a new file can take macOS a second to
+            // allow, which would use up the timeout under test.
+            let warmed = Inbox<ChildProcess.Exit>()
+            _ = try ChildProcess.start(
+                shell, arguments: [], environment: toolPath, errorLog: nil,
+                queue: DispatchQueue(label: "warm"), onLine: { _ in }, onExit: { warmed.add($0) })
+            try #require(await warmed.wait(10) { !$0.isEmpty } != nil)
 
             let started = Date()
-            let result = await offThread { LoginEnvironment.capture(shell: shell, timeout: 1) }
-            #expect(result == .failure(.init(reason: "\(shell) did not print its environment within 1 seconds")))
-            #expect(Date().timeIntervalSince(started) < 4)
+            let result = await offThread { LoginEnvironment.capture(shell: shell, timeout: 2) }
+            #expect(result == .failure(.init(reason: "\(shell) did not print its environment within 2 seconds")))
+            #expect(Date().timeIntervalSince(started) < 5)
 
             let text = try String(contentsOf: directory.appendingPathComponent("child.pid"), encoding: .utf8)
             let child = try #require(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))

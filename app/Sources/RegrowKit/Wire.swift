@@ -13,6 +13,12 @@ public enum Wire {
         public var isTerminal: Bool { event == "done" || event == "error" }
     }
 
+    /// What the log says of a request line.
+    public struct Request: Decodable, Equatable {
+        public let type: String
+        public let id: String
+    }
+
     public struct Hello: Decodable, Equatable {
         public let `protocol`: Int
         public let version: String
