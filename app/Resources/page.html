@@ -249,7 +249,7 @@ const S = {
   known: false,       // the first plan has said what starts ticked
   ticked: new Set(),  // atoms, each one handed over in a finding's select
   tray: null,         // what the ticked atoms come to: {totals, skipped}; null while the engine counts, false if it could not
-  planning: false,    // a plan to review is on its way
+  planning: '',       // the id of the plan to review that is on its way: only its answer is drawn
   plan: null,         // the plan under review, see newPlan
   note: '',           // why the plan under review replaced another
   automation: '',     // asking | allowed | denied: whether regrow may control Finder
@@ -323,14 +323,15 @@ window.regrow = { receive(line) {
 } };
 
 const on = {
-  // Also sent when the engine starts again: every id from before is dead.
-  hello(e) { asked.clear(); S.down = ''; S.hello = e; scan(); },
+  // Also sent when the engine starts again, always after engine_down: every id from before is dead. Without
+  // one between, it is the shell's answer to ready repeating the hello the page has, and starts no scan.
+  hello(e) { if (S.hello && !S.down) return; asked.clear(); S.down = ''; S.hello = e; scan(); },
   tick(e) { S.tick = e; },
   shell(e) {
     if (e.state === 'environment') S.env = e.captured === false ? e.reason || 'no reason given' : '';
     if (e.state === 'automation') S.automation = e.allowed ? 'allowed' : 'denied';
     if (e.state !== 'engine_down') return;
-    if (S.run && !S.run.result) S.cut = { id: S.plan.id, done: S.plan.actions.filter((a) => stateOf(a).state === 'done').length, of: S.plan.actions.length };
+    if (S.run && !S.run.result) S.cut = { id: S.plan.id, began: Object.keys(S.run.marks).length > 0, done: S.plan.actions.filter((a) => stateOf(a).state === 'done').length, of: S.plan.actions.length };
     asked.clear();
     counting = clearTimeout(counting);
     S.down = e.message || 'no reason given';
@@ -349,8 +350,8 @@ const on = {
       S.tray = figures;
     } else if (role === 'count') {
       if (e.re === latest) S.tray = figures;
-    } else if (role === 'review' && S.planning) {
-      Object.assign(S, { tray: figures, plan: newPlan(e), planning: false, screen: 'plan', read: false, automation: '' });
+    } else if (role === 'review' && e.re === S.planning) {
+      Object.assign(S, { tray: figures, plan: newPlan(e), planning: '', screen: 'plan', read: false, automation: '' });
     }
   },
   journal(e, role) {
@@ -369,7 +370,8 @@ const on = {
     if (OUT_OF_DATE[e.code] && (role === 'first' || role === 'count' || role === 'review')) {
       S.scan.phase = 'stale';
       S.scan.why = e.message || '';
-      Object.assign(S, { screen: 'findings', planning: false, plan: null });
+      // A run and its result keep their plan: the scan was spent by that run.
+      if (S.screen !== 'running' && S.screen !== 'result') Object.assign(S, { screen: 'findings', planning: '', plan: null });
     } else if (role === 'run' && e.result) {
       ended(e.result, false, e.message || e.code);
     } else if (role === 'run') {
@@ -378,7 +380,7 @@ const on = {
       review('The plan you confirmed did not run, so this is a fresh one. Nothing has run.');
     } else {
       if (role === 'scan') S.scan = null;
-      if (role === 'review') S.planning = false;
+      if (role === 'review' && e.re === S.planning) S.planning = '';
       if (role === 'count') S.tray = false;
       S.error = e;
     }
@@ -387,7 +389,7 @@ const on = {
 
 function scan() {
   counting = clearTimeout(counting);
-  Object.assign(S, { screen: 'findings', scan: newScan(), known: false, ticked: new Set(), tray: null, planning: false,
+  Object.assign(S, { screen: 'findings', scan: newScan(), known: false, ticked: new Set(), tray: null, planning: '',
     plan: null, note: '', run: null, error: null, safeOpen: false, open: new Set() });
   S.scan.req = ask('scan', 'scan');
 }
@@ -395,8 +397,8 @@ function scan() {
 // A plan to review is always a fresh one, so the time it can run in starts when it is drawn.
 function review(note) {
   S.note = note;
-  S.planning = true;
-  ask('plan', 'review', { scan_id: S.scan.id, select: [...S.ticked] });
+  counting = clearTimeout(counting);
+  S.planning = ask('plan', 'review', { scan_id: S.scan.id, select: [...S.ticked] });
 }
 
 function ended(result, canceled, error) {
@@ -447,7 +449,7 @@ const act = {
   again() { if (!S.down && S.screen === 'plan' && !S.planning) review(''); },
   back() {
     if (S.screen === 'confirm') S.screen = 'plan';
-    else if (S.screen === 'plan') Object.assign(S, { screen: 'findings', plan: null, planning: false, note: '' });
+    else if (S.screen === 'plan') Object.assign(S, { screen: 'findings', plan: null, planning: '', note: '' });
   },
   confirm() {
     const p = S.plan;
@@ -470,8 +472,8 @@ const act = {
     S.run.stopping = true;
     ask('cancel', 'cancel', { target: S.run.req });
   },
-  fda() { S.opened = true; post({ shell: 'open-full-disk-access' }); },
-  relaunch() { post({ shell: 'relaunch' }); },
+  fda() { if (S.hello && S.hello.fda === 'denied') { S.opened = true; post({ shell: 'open-full-disk-access' }); } },
+  relaunch() { if (S.opened) post({ shell: 'relaunch' }); },
 };
 
 // ---------- words and figures ----------
@@ -611,7 +613,7 @@ function notices(all) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow's engine answered with an error: <span class="err mono">${S.error.message || S.error.code}</span></span></div>`);
   }
   if (S.cut) {
-    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped while a plan was running: ${S.cut.done} of ${num(S.cut.of, 'action')} had been done. What went to the Trash comes back with <span class="mono">regrow undo ${S.cut.id}</span></span></div>`);
+    rows.push(h`<div class="note">${ICON.caution}<span>${S.cut.began ? h`The engine stopped while a plan was running: ${S.cut.done} of ${num(S.cut.of, 'action')} had been done. What went to the Trash comes back with <span class="mono">regrow undo ${S.cut.id}</span>` : 'The engine stopped before the plan began. Nothing ran.'}</span></div>`);
   }
   if (all && S.env) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow could not read your login shell's environment, so tools outside the system folders are not found: <span class="mono">${S.env}</span></span></div>`);
@@ -765,7 +767,7 @@ function drawConfirm() {
     : S.automation === 'denied' ? h`<b>${num(moves, 'move')} to regrow staging.</b> regrow may not control Finder, so the moves land in regrow staging: regrow undo restores them, and emptying the Trash does not free them.`
     : h`<b>${num(moves, 'move')} to the Trash.</b> Free once you empty it; until then regrow undo puts them back.`;
   return h`<section class="ask"><h2>${run}?</h2><dl>
-      ${cmds ? h`<dt><i class="sw frees_now"></i>${size(t.frees_now)}</dt><dd><b>${num(cmds, 'command')} with no undo.</b> The space is free as ${cmds === 1 ? 'it runs, and what it deletes' : 'they run, and what they delete'} comes back only by regrowing.${p.actions.some((a) => a.empties_trash) ? ' One empties the Trash: what is in it now is gone for good.' : ''}</dd>` : ''}
+      ${cmds ? h`<dt><i class="sw frees_now"></i>${size(t.frees_now)}</dt><dd><b>${num(cmds, 'command')} with no undo.</b> The space is free as ${cmds === 1 ? 'it runs, and what it deletes' : 'they run, and what they delete'} comes back only by regrowing.${p.actions.some((a) => a.empties_trash) ? ' One of them empties the Trash: what is in it now is gone for good.' : ''}</dd>` : ''}
       ${moves ? h`<dt><i class="sw after_trash"></i>${size(t.after_trash)}</dt><dd>${trash}</dd>` : ''}
       ${names.length ? h`<dt><i class="sw"></i>${p.skipped.length} skipped</dt><dd>Left as ${names.length === 1 ? 'it is' : 'they are'}: ${names.join(', ')}. The plan says why.</dd>` : ''}</dl>
     <div class="gate"><label><input type="checkbox" id="read" ${S.read ? 'checked' : ''}><span>${cmds ? `I read the ${num(cmds, 'command')}. ${cmds === 1 ? 'It has' : 'They have'} no undo.` : 'I read the plan. Every action in it is a move that regrow undo puts back.'}</span></label>

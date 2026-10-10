@@ -92,6 +92,7 @@ struct Play {
     var scanStops = false                // half the findings arrive, the rest wait for a cancel
     var planError: (code: String, message: String)?  // the answer to the next plan request that carries a select
     var leaveOpen = false                // a selection the transcript has no plan for goes unanswered
+    var holdPlan = false                 // the next plan with a select is answered only by releasePlan()
     var automation: Bool? = true         // nil: the answer is withheld
     var execute = "execute"
     var executeStops = false             // half the journal arrives
@@ -132,6 +133,7 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
     private var scanID = ""
     private(set) var planID = ""
     private(set) var executeRequest = ""
+    private var planHeld: [String] = []
 
     init(name: String, dark: Bool, transcript: Transcript, out: URL, play: Play) {
         self.name = name + (dark ? "-dark" : "-light")
@@ -467,8 +469,20 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
         var lines = answering(section, id)
         lines[0] = lines[0].replacingOccurrences(of: "\"expires_at\":\"[^\"]*\"", with: "\"expires_at\":\"\(expires)\"", options: .regularExpression)
         if !lines[0].contains(expires) { fail("the recorded plan has no expires_at to set") }
+        if select != nil, play.holdPlan {
+            play.holdPlan = false
+            planHeld = lines
+            return
+        }
         planID = parse(lines[0]).str("plan_id")
         send(lines)
+    }
+
+    /// Sends the answer `holdPlan` kept back, late.
+    func releasePlan() {
+        expect(!planHeld.isEmpty, "no plan answer was held")
+        send(planHeld)
+        planHeld = []
     }
 
     private func answer(execute id: String, _ body: [String: Any]) {
@@ -983,6 +997,39 @@ struct Scenario {
             r.same(await r.screen(), "plan", "the screen after the refusal")
             r.has(await r.text(".lead .aside"), "did not run, so this is a fresh one. Nothing has run.", "why the plan is a fresh one")
             r.same(await r.text(".tray .btn:not(.quiet)"), "Run plan…", "the tray's action on the fresh plan")
+            await r.shoot()
+        },
+        Scenario(name: "stale-review") { r in
+            // A fresh plan is asked for, the owner goes back and changes the ticks before it comes, and asks again:
+            // the late answer to the first request is not the plan drawn.
+            await toPlan(r)
+            await r.jump(minutes: 11)
+            await r.wait(for: "Plan again on a plan that is too old", "!!document.querySelector('[data-do=again]')")
+            r.play.holdPlan = true
+            r.expect(await r.click("[data-do=again]"), "there is no Plan again to click")
+            r.expect(await r.click("[data-do=back]"), "there is no Back to click")
+            r.same(await r.screen(), "findings", "the screen after Back")
+            r.play.leaveOpen = true
+            await r.js("document.querySelector('input[data-tick]:checked:not([data-item])').click(); return null")
+            await r.settle()
+            r.expect(await r.click("[data-do=review]"), "there is no Review plan to click")
+            let reviews = r.sent("plan").count
+            r.releasePlan()
+            await r.settle()
+            r.same(await r.screen(), "findings", "the screen once the first request's answer came")
+            r.same(await r.text("#next"), "Planning", "the tray's action while the second request is out")
+            r.same(r.sent("plan").count, reviews, "plan requests after the late answer")
+            r.same(r.sent("execute").count, 0, "executes sent")
+            await r.shoot()
+        },
+        Scenario(name: "hello-again") { r in
+            // The shell repeats the engine's hello when the page says it is ready: one hello, one scan.
+            await results(r)
+            let scans = r.sent("scan").count
+            r.send([r.transcript.lines("hello")[0]])
+            await r.settle()
+            r.same(r.sent("scan").count, scans, "scans after the same hello came again")
+            await results(r)
             await r.shoot()
         },
         Scenario(name: "other-error") { r in
