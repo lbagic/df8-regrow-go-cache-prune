@@ -143,6 +143,58 @@ func TestTickWithAnUnreadableHistory(t *testing.T) {
 	}
 }
 
+// A tick reports what regrow's staging directory holds, measured once
+// the tick itself has run. Without the seam, or with nothing staged,
+// the field is absent.
+func TestTickReportsStagedBytes(t *testing.T) {
+	sampled := func(context.Context, bool) (headroom.Tick, error) {
+		return headroom.Tick{Sample: headroom.Sample{At: tickAt, Free: 7}}, nil
+	}
+	tests := []struct {
+		name   string
+		staged func(context.Context) int64
+		want   string
+	}{
+		{"staged bytes are reported", func(context.Context) int64 { return 4096 }, `"staged_bytes":4096`},
+		{"an empty staging directory leaves the field out", func(context.Context) int64 { return 0 }, ""},
+		{"no seam leaves the field out", nil, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newMachine(t)
+			srv := m.server()
+			srv.Tick = sampled
+			srv.Staged = tt.staged
+			p := start(t, srv)
+			p.expect("hello")
+			p.send(`{"type":"tick","id":"t"}`)
+			got := p.expect("tick/t", "done/t")[0]
+			if tt.want == "" && strings.Contains(got.raw, "staged_bytes") {
+				t.Fatalf("tick = %s, want no staged_bytes", got.raw)
+			}
+			if !strings.Contains(got.raw, tt.want) {
+				t.Fatalf("tick = %s, want %s", got.raw, tt.want)
+			}
+		})
+	}
+
+	// A tick that took no sample sends no tick event, and measures
+	// nothing for it.
+	m := newMachine(t)
+	srv := m.server()
+	srv.Tick = func(context.Context, bool) (headroom.Tick, error) {
+		return headroom.Tick{}, errors.New("statfs: no such volume")
+	}
+	srv.Staged = func(context.Context) int64 {
+		t.Error("staging was measured for a tick with no sample")
+		return 0
+	}
+	p := start(t, srv)
+	p.expect("hello")
+	p.send(`{"type":"tick","id":"t"}`)
+	p.expectError("t", CodeTickFailed)
+}
+
 // A tick is an operation like a scan or an execute: one at a time, and
 // shutdown waits for it, since its autotrim prune is never cut short.
 func TestTickIsAnOperation(t *testing.T) {

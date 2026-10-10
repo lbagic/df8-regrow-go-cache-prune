@@ -60,6 +60,10 @@ type Server struct {
 	// autopilot.Autopilot.Tick, autotrim gate included. Nil refuses
 	// tick requests.
 	Tick func(ctx context.Context, autotrim bool) (headroom.Tick, error)
+	// Staged measures what regrow's staging directory holds, for a
+	// tick's staged_bytes: a lower bound where part of it cannot be
+	// read. Nil omits the field.
+	Staged func(ctx context.Context) int64
 	// NewExecutor builds the executor of one run: journal open, mover
 	// and pre-actions pointed at the run's staging directory. release
 	// is called once the run has ended. The server sets the run id,
@@ -572,7 +576,11 @@ func (s *session) startTick(req request) {
 		if !tick.At.IsZero() {
 			// A sampled tick is reported even when it also failed: a
 			// refused autotrim must not hide the alerts.
-			s.emit(inlineEvent{head{"tick", op.re}, tickBody{tick, unreadable}})
+			body := tickBody{Tick: tick, HistoryUnreadable: unreadable}
+			if s.srv.Staged != nil {
+				body.StagedBytes = s.srv.Staged(context.Background())
+			}
+			s.emit(inlineEvent{head{"tick", op.re}, body})
 		}
 		var terminal any = done(op.re)
 		switch {
@@ -585,12 +593,13 @@ func (s *session) startTick(req request) {
 	}()
 }
 
-// tickBody is a tick event's fields: the tick's own, and whether the
+// tickBody is a tick event's fields: the tick's own, whether the
 // headroom history could not be read, which leaves the tick without a
-// forecast or alerts.
+// forecast or alerts, and the bytes in regrow's staging directory.
 type tickBody struct {
 	headroom.Tick
-	HistoryUnreadable bool `json:"history_unreadable,omitempty"`
+	HistoryUnreadable bool  `json:"history_unreadable,omitempty"`
+	StagedBytes       int64 `json:"staged_bytes,omitempty"`
 }
 
 // splitHistoryUnreadable takes autopilot.ErrHistoryUnreadable out of a

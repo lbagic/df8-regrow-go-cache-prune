@@ -16,6 +16,7 @@ import (
 
 	"github.com/lbagic/regrow/internal/engine"
 	"github.com/lbagic/regrow/internal/headroom"
+	"github.com/lbagic/regrow/internal/trash"
 )
 
 // The engine wiring, scan and plan only: a real execute would hand the
@@ -324,6 +325,46 @@ func TestEngineTickIsTheAutopilotTick(t *testing.T) {
 	history, err := headroom.Tail(filepath.Join(state, "regrow", headroom.FileName), time.Time{})
 	if err != nil || len(history) != 1 || !history[0].At.Equal(tick.At) {
 		t.Fatalf("history = %+v, %v; want the tick's sample recorded", history, err)
+	}
+}
+
+// The engine's staged bytes are what a run's executor put in staging:
+// the same directory, measured.
+func TestStagedBytesMeasuresTheStagingDirectory(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if got := stagedBytes(context.Background()); got != 0 {
+		t.Fatalf("stagedBytes = %d with no staging directory, want 0", got)
+	}
+
+	ex, release, err := newRunExecutor(engine.Host{OS: "darwin", Home: t.TempDir()}, "fixture-run", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	staging := ex.Trash.(*trash.Mover).StagingDir
+	if want := filepath.Join(state, "regrow", "staging", "fixture-run"); staging != want {
+		t.Fatalf("a run stages into %s, want %s", staging, want)
+	}
+	for _, rel := range []string{"moved/a.bin", "moved/deep/b.bin"} {
+		p := filepath.Join(staging, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, make([]byte, 8192), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Beside the staging directory, not in it.
+	if err := os.WriteFile(filepath.Join(state, "regrow", "headroom.jsonl"), make([]byte, 1<<20), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := stagedBytes(context.Background()); got < 2*8192 || got >= 1<<20 {
+		t.Fatalf("stagedBytes = %d, want the two staged files and nothing beside staging", got)
+	}
+	if srv := newEngineServer(engine.Host{OS: "darwin", Home: t.TempDir()}, nil, nil); srv.Staged == nil || srv.Staged(context.Background()) < 2*8192 {
+		t.Fatal("the engine's server does not measure the staging directory")
 	}
 }
 

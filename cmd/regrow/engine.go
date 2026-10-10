@@ -14,6 +14,7 @@ import (
 	"github.com/lbagic/regrow/internal/engine"
 	"github.com/lbagic/regrow/internal/executor"
 	"github.com/lbagic/regrow/internal/headroom"
+	"github.com/lbagic/regrow/internal/oplog"
 	"github.com/lbagic/regrow/internal/protocol"
 	"github.com/lbagic/regrow/internal/scanner"
 )
@@ -84,6 +85,7 @@ func newEngineServer(host engine.Host, catalog []engine.Rule, flags []string) *p
 		Account:    engine.Account,
 		Headroom:   headroom.Take,
 		Tick:       tickFor(host, catalog),
+		Staged:     stagedBytes,
 		NewExecutor: func(runID string) (*executor.Executor, func(), error) {
 			return newRunExecutor(host, runID, dockerStream)
 		},
@@ -98,6 +100,18 @@ func tickFor(host engine.Host, catalog []engine.Rule) func(context.Context, bool
 		}
 		return ap.Tick(ctx, autotrim)
 	}
+}
+
+// stagedBytes measures regrow's staging directory, where a run puts
+// what Finder could not take and the docker volume exports: 0 when
+// there is none, a lower bound when part of it cannot be read.
+func stagedBytes(ctx context.Context) int64 {
+	logPath, err := oplog.DefaultPath()
+	if err != nil {
+		return 0
+	}
+	usage, _ := scanner.DirSize(ctx, stagingRoot(logPath))
+	return usage.Bytes
 }
 
 // engineAutopilot is the autopilot with the engine's steward-command
