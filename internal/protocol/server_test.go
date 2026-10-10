@@ -402,6 +402,71 @@ func TestPlanExpiresAfterTenMinutes(t *testing.T) {
 	}
 }
 
+// expires_at is the moment the plan stops running: an execute at it
+// runs, one a nanosecond past it is refused.
+func TestPlanEventSaysWhenThePlanExpires(t *testing.T) {
+	m := newMachine(t)
+	made := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	clock := &fakeClock{now: made}
+	srv := m.server()
+	srv.Now = clock.Now
+	p := start(t, srv)
+	p.expect("hello")
+
+	onTime := p.planned("p1", p.scanned("s1", 2), `["fixture-cache"]`)
+	if want := made.Add(10 * time.Minute); !onTime.ExpiresAt.Equal(want) || !strings.Contains(onTime.raw, `"expires_at":"2026-10-04T12:10:00Z"`) {
+		t.Fatalf("plan = %s, want expires_at %s in RFC 3339", onTime.raw, want)
+	}
+	clock.advance(onTime.ExpiresAt.Sub(made))
+	p.send(`{"type":"execute","id":"x1","plan_id":"` + onTime.PlanID + `"}`)
+	p.expect("journal/x1", "journal/x1", "done/x1")
+
+	made = clock.Now()
+	late := p.planned("p2", p.scanned("s2", 2), `["fixture-logs"]`)
+	clock.advance(late.ExpiresAt.Sub(made) + time.Nanosecond)
+	p.send(`{"type":"execute","id":"x2","plan_id":"` + late.PlanID + `"}`)
+	p.expectError("x2", CodePlanExpired)
+	if !exists(m.logs) {
+		t.Fatal("a plan past its expires_at moved its target")
+	}
+
+	// A shorter life moves expires_at with it.
+	short := m.server()
+	short.Now = func() time.Time { return made }
+	short.PlanTTL = 90 * time.Second
+	q := start(t, short)
+	q.expect("hello")
+	if e := q.planned("p", q.scanned("s", 2), ""); !e.ExpiresAt.Equal(made.Add(90 * time.Second)) {
+		t.Fatalf("plan = %s, want expires_at 90 s after %s", e.raw, made)
+	}
+}
+
+// A plan event echoes the atoms it was built from, sorted: what a peer
+// sent, or the default selection when it sent none.
+func TestPlanEventEchoesItsSelection(t *testing.T) {
+	m := newMachine(t)
+	p := start(t, m.server())
+	p.expect("hello")
+	scanID := p.scanned("s", 2)
+	tests := []struct {
+		name       string
+		selectJSON string
+		want       string
+	}{
+		{"no select echoes the default selection", "", `"select":["fixture-cache"]`},
+		{"null select too", "null", `"select":["fixture-cache"]`},
+		{"an empty select is echoed empty", "[]", `"select":[]`},
+		{"sent atoms come back sorted, each once",
+			`["fixture-logs/~/proj/logs","fixture-cache","fixture-logs/~/proj/logs"]`,
+			`"select":["fixture-cache","fixture-logs/~/proj/logs"]`},
+	}
+	for _, tt := range tests {
+		if e := p.planned("p", scanID, tt.selectJSON); !strings.Contains(e.raw, tt.want) {
+			t.Errorf("%s: plan = %s, want %s", tt.name, e.raw, tt.want)
+		}
+	}
+}
+
 func TestPlanClockIgnoresTheMonotonicReading(t *testing.T) {
 	// The monotonic clock stops while a Mac sleeps; a plan made before
 	// a night with the lid closed must be measured in wall time.

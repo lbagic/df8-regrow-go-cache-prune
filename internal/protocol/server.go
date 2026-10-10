@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -413,6 +414,11 @@ func (s *session) plan(req request) {
 			selected[atom] = true
 		}
 	}
+	atoms := make([]string, 0, len(selected))
+	for atom := range selected {
+		atoms = append(atoms, atom)
+	}
+	sort.Strings(atoms)
 	plan := engine.BuildPlanWith(s.srv.Host, sc.findings, selected, engine.PlanOptions{NoSudo: true, CleanFlags: s.srv.CleanFlags})
 	if len(plan.Unmatched) > 0 {
 		// As `regrow clean` does: a typo must never run less, or for a
@@ -434,16 +440,21 @@ func (s *session) plan(req request) {
 	}
 	id := newPlanID(now)
 	s.plans[id] = heldPlan{plan: plan, scan: sc, created: now}
-	s.emit(planEvent{head{"plan", req.ID}, id, plan, plan.Totals()})
+	s.emit(planEvent{head{"plan", req.ID}, id, now.Add(s.planTTL()).UTC(), atoms, plan, plan.Totals()})
 	s.emit(done(req.ID))
 }
 
-func (s *session) expired(held heldPlan, now time.Time) bool {
-	ttl := s.srv.PlanTTL
-	if ttl == 0 {
-		ttl = defaultPlanTTL
+func (s *session) planTTL() time.Duration {
+	if s.srv.PlanTTL != 0 {
+		return s.srv.PlanTTL
 	}
-	return held.expired || now.Sub(held.created) > ttl
+	return defaultPlanTTL
+}
+
+// expired: a plan runs up to and at created plus the TTL, the moment
+// its plan event announced as expires_at.
+func (s *session) expired(held heldPlan, now time.Time) bool {
+	return held.expired || now.Sub(held.created) > s.planTTL()
 }
 
 func (s *session) startExecute(req request) {
