@@ -49,7 +49,7 @@ Starting a scan makes it the engine's current scan and drops the previous scan's
 |---|---|
 | `headroom` | the free-space sample's own fields on the event line: `at`; `total` and `free` of the data volume (`free` is what df shows); `purgeable`; `swap_used` |
 | `start` | `scan_id`: names this scan in `plan`; `rules`: how many `finding` events follow |
-| `finding` | `scan_id`; `index`: the rule's position in the catalog; `took_ms`: the rule's own scan time; `finding`: the Finding (below) |
+| `finding` | `scan_id`; `index`: the rule's position in the catalog; `took_ms`: the rule's own scan time; `bucket`: the total the rule's bytes are counted in; `select`: the atoms that tick this row, absent when it cannot be ticked; `finding`: the Finding (below) |
 | `summary` | `scan_id`; `totals`: the Totals of every item; `exclusive`: item id → bytes the item frees on its own, nested items excluded |
 | `done` | `elapsed_ms`; `canceled`: `true` when the scan was canceled |
 
@@ -75,6 +75,15 @@ Totals, in `summary` and `plan`, split bytes by when they become free space:
 
 `frees_now` is freed as steward commands run; `after_trash` only once the Trash is emptied; `shown_only` is surface-only and never deleted; `macos_managed` is phantom space macOS reclaims itself. `partial` counts items whose bytes are lower bounds.
 
+A finding's `bucket` is the name of one of the four: `frees_now`, `after_trash`, `shown_only` or `macos_managed`. It is always present, and it is the bucket the `summary` counted the rule's items in, so a peer never works it out from the rule.
+
+A finding's `select` lists the atoms that tick its row, in item order. A peer that lets the owner pick sends only atoms it was given here:
+
+- absent when the rule is surface-only, found nothing, or failed: nothing to tick;
+- item ids, each once, when the rule acts per item (a Trash move, or a steward command that names its item): each can be picked on its own. Unreadable items are left out, so one can never be picked, and a rule with nothing read has no `select`;
+- the rule's id alone, when a steward command acts on the whole rule and every item was read: the row is all or nothing;
+- absent when such a command would take an unreadable item along.
+
 ### plan
 
 ```json
@@ -87,14 +96,19 @@ Totals, in `summary` and `plan`, split bytes by when they become free space:
 
 | Event | Fields |
 |---|---|
-| `plan` | `plan_id`; `plan`: `{actions, skipped}`; `totals` (`frees_now` and `after_trash` are filled) |
+| `plan` | `plan_id`; `expires_at`; `select`; `plan`: `{actions, skipped}`; `totals` (`frees_now` and `after_trash` are filled) |
 | `done` | — |
 
-An action is `{rule_id, item_key, kind, command, pre_action, path, bytes, empties_trash, sudo, includes}`: `kind` is `native` (a steward command, no undo) or `trash` (a Finder move that `regrow undo` restores), `command` is the exact argv, and action bytes never overlap, so they sum to the plan's total. `includes` is `[{id, bytes}]`, absent when empty: the scanned items inside the action's target that no action of this plan deletes on its own, such as an unselected `node_modules` inside a worktree being removed. They are deleted with the target, each `id` is an item id as `select` takes them, and the action's `bytes` already counts theirs, so a peer shows them and never adds them. A skip is `{rule_id, item_key, reason}`. An action that would need administrator rights is never planned here: it is a skip whose reason names the Terminal command, for example ``needs administrator rights — run `regrow clean spotlight-index` in Terminal``.
+The event's `select` is the atoms the plan was built from, sorted: the request's own, or the default selection when the request sent none, which is how a peer learns what starts ticked. The default selection names a rule read in full by its rule id, also where the finding's `select` lists item ids: the rule id stands for all of them. `expires_at` is an RFC 3339 time, the wall-clock moment after which an `execute` of this plan answers `plan_expired`; an execute at that moment still runs.
+
+An action is `{rule_id, item_key, kind, command, pre_action, path, bytes, empties_trash, sudo, includes}`: `kind` is `native` (a steward command, no undo) or `trash` (a Finder move that `regrow undo` restores), `command` is the exact argv, and action bytes never overlap, so they sum to the plan's total. `includes` is `[{id, bytes}]`, absent when empty: the scanned items inside the action's target that no action of this plan deletes on its own, such as an unselected `node_modules` inside a worktree being removed. They are deleted with the target, each `id` is an item id as `select` takes them, and the action's `bytes` already counts theirs, so a peer shows them and never adds them. A skip is `{rule_id, item_key, reason}`. Two kinds of action are never planned here, only skipped, one skip for the rule or one per item when only some of its items were picked. `regrow plan` and `regrow clean` in a terminal plan both as actions.
+
+- An action that would need administrator rights: the reason names the Terminal command, for example ``needs administrator rights — run `regrow clean spotlight-index` in Terminal``. The command starts with `regrow` when that name on the engine's PATH is the engine's own binary. Otherwise it starts with the binary's absolute path, quoted for the shell where it needs it, as for an engine inside an app bundle: ``run `/Users/dev/Applications/Regrow.app/Contents/MacOS/regrow-engine clean spotlight-index` in Terminal``.
+- An action whose program, the first word of the rule's `native_command`, is not on the engine's PATH: the reason is `` `go` is not on the PATH regrow was started with ``. Run, the action could only fail; skipped, it is a state the owner sees before confirming. The program is looked up before the rights are, so a missing program reads as missing.
 
 A plan id:
 
-- is executable once, for 10 minutes of wall-clock time, sleep included;
+- is executable once, for 10 minutes of wall-clock time, sleep included: until the plan event's `expires_at`;
 - dies when a newer scan starts, even one later canceled;
 - dies when an execute of its scan starts running: that run changes what the scan measured, so every plan of the scan is dropped and planning from it again answers `scan_spent`. An execute refused as `busy` spends nothing, and one refused later but before it ran (`plan_expired`, an `execute_failed` with no `result`) spends only its own plan id;
 - is the oplog run id its execution journals under, so `regrow history` and `regrow undo <plan_id>` find the run;
@@ -145,8 +159,12 @@ One pass of the watch loop, as `regrow tick` runs it: a free-space sample append
 
 | Event | Fields |
 |---|---|
-| `tick` | the sample's fields as in `headroom`, plus `days_to_full` (absent without a forecast), `alerts` (`[{kind, message, band, acute, top_process}]`, absent when none crossed), `pruned` (what autotrim did or why it did not run: `{rule_id, skipped, run, files, bytes, free_before, free_after, error}`) and `history_unreadable` |
+| `tick` | the sample's fields as in `headroom`, plus `days_to_full` (absent without a forecast), `no_forecast` (why there is none), `alerts` (`[{kind, message, band, acute, top_process}]`, absent when none crossed), `pruned` (what autotrim did or why it did not run: `{rule_id, skipped, run, files, bytes, free_before, free_after, error}`), `history_unreadable` and `staged_bytes` |
 | `done` | — |
+
+`no_forecast` says why `days_to_full` is absent: `short_history`, fewer than three samples since free space last jumped up, or samples that span under three hours; or `not_falling`, enough history with free space steady or rising. It is absent with a forecast, and absent with `history_unreadable`, which is its own reason.
+
+`staged_bytes` is the bytes under the state directory's `staging/`, where a run puts what Finder could not take and the docker volume exports. Emptying the Trash never frees them. It is a lower bound where part of the directory cannot be read, and absent when there is nothing there.
 
 `history_unreadable: true` says the headroom history could not be read: the sample was still taken and recorded, but this tick has no forecast and no alerts, and autotrim judged headroom by the top free-space band alone. It is a fact about the tick, not a failure: such a tick still ends with `done` unless something else failed. The field is absent otherwise.
 
@@ -185,12 +203,12 @@ A tick that sampled sends its `tick` event even when it then fails, so the alert
 → {"type":"scan","id":"s1"}
 ← {"event":"headroom","re":"s1","at":"2026-10-04T10:00:00Z","total":494384795648,"free":53260738560,"purgeable":580311360,"swap_used":4998168576}
 ← {"event":"start","re":"s1","scan_id":"9f2c01aa-1","rules":2}
-← {"event":"finding","re":"s1","scan_id":"9f2c01aa-1","index":1,"took_ms":4,"finding":{…}}
-← {"event":"finding","re":"s1","scan_id":"9f2c01aa-1","index":0,"took_ms":9,"finding":{…}}
+← {"event":"finding","re":"s1","scan_id":"9f2c01aa-1","index":1,"took_ms":4,"bucket":"after_trash","select":["xcode-derived-data/~/Library/Developer/Xcode/DerivedData/App-abc"],"finding":{…}}
+← {"event":"finding","re":"s1","scan_id":"9f2c01aa-1","index":0,"took_ms":9,"bucket":"frees_now","select":["go-build-cache"],"finding":{…}}
 ← {"event":"summary","re":"s1","scan_id":"9f2c01aa-1","totals":{…},"exclusive":{…}}
 ← {"event":"done","re":"s1","elapsed_ms":9,"canceled":false}
 → {"type":"plan","id":"p1","scan_id":"9f2c01aa-1"}
-← {"event":"plan","re":"p1","plan_id":"20261004-120000-5b0e…","plan":{"actions":[…]},"totals":{…}}
+← {"event":"plan","re":"p1","plan_id":"20261004-120000-5b0e…","expires_at":"2026-10-04T12:10:00.25Z","select":["go-build-cache","xcode-derived-data"],"plan":{"actions":[…]},"totals":{…}}
 ← {"event":"done","re":"p1"}
 → {"type":"execute","id":"x1","plan_id":"20261004-120000-5b0e…"}
 ← {"event":"journal","re":"x1","entry":{"run":"20261004-120000-5b0e…","seq":1,"event":"start",…}}
