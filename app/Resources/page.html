@@ -331,7 +331,7 @@ const on = {
     if (e.state === 'environment') S.env = e.captured === false ? e.reason || 'no reason given' : '';
     if (e.state === 'automation') S.automation = e.allowed ? 'allowed' : 'denied';
     if (e.state !== 'engine_down') return;
-    if (S.run && !S.run.result) S.cut = { id: S.plan.id, began: Object.keys(S.run.marks).length > 0, done: S.plan.actions.filter((a) => stateOf(a).state === 'done').length, of: S.plan.actions.length };
+    if (S.run && !S.run.result) S.cut = { id: S.plan.id, done: S.plan.actions.filter((a) => stateOf(a).state === 'done').length, of: S.plan.actions.length };
     asked.clear();
     counting = clearTimeout(counting);
     S.down = e.message || 'no reason given';
@@ -378,9 +378,10 @@ const on = {
       // Nothing ran: back to the plan, with a fresh one. A plan that was too old needs no more words than that.
       Object.assign(S, { screen: 'plan', run: null, error: e.code === 'plan_expired' || e.code === 'unknown_plan' ? null : e });
       review('The plan you confirmed did not run, so this is a fresh one. Nothing has run.');
-    } else {
+    } else if (role !== 'review' || e.re === S.planning) {
+      // An error for a review the page has dropped is dropped with it.
       if (role === 'scan') S.scan = null;
-      if (role === 'review' && e.re === S.planning) S.planning = '';
+      if (role === 'review') S.planning = '';
       if (role === 'count') S.tray = false;
       S.error = e;
     }
@@ -395,9 +396,9 @@ function scan() {
 }
 
 // A plan to review is always a fresh one, so the time it can run in starts when it is drawn.
+// A count still due is left to go out: a review that fails or is dropped does not fill the tray.
 function review(note) {
   S.note = note;
-  counting = clearTimeout(counting);
   S.planning = ask('plan', 'review', { scan_id: S.scan.id, select: [...S.ticked] });
 }
 
@@ -613,7 +614,8 @@ function notices(all) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow's engine answered with an error: <span class="err mono">${S.error.message || S.error.code}</span></span></div>`);
   }
   if (S.cut) {
-    rows.push(h`<div class="note">${ICON.caution}<span>${S.cut.began ? h`The engine stopped while a plan was running: ${S.cut.done} of ${num(S.cut.of, 'action')} had been done. What went to the Trash comes back with <span class="mono">regrow undo ${S.cut.id}</span>` : 'The engine stopped before the plan began. Nothing ran.'}</span></div>`);
+    // No journal line yet does not prove that nothing began: the engine journals an action before it reports it.
+    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped before the plan's end: ${S.cut.done} of ${num(S.cut.of, 'action')} had been done. What went to the Trash comes back with <span class="mono">regrow undo ${S.cut.id}</span></span></div>`);
   }
   if (all && S.env) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow could not read your login shell's environment, so tools outside the system folders are not found: <span class="mono">${S.env}</span></span></div>`);
@@ -767,7 +769,7 @@ function drawConfirm() {
     : S.automation === 'denied' ? h`<b>${num(moves, 'move')} to regrow staging.</b> regrow may not control Finder, so the moves land in regrow staging: regrow undo restores them, and emptying the Trash does not free them.`
     : h`<b>${num(moves, 'move')} to the Trash.</b> Free once you empty it; until then regrow undo puts them back.`;
   return h`<section class="ask"><h2>${run}?</h2><dl>
-      ${cmds ? h`<dt><i class="sw frees_now"></i>${size(t.frees_now)}</dt><dd><b>${num(cmds, 'command')} with no undo.</b> The space is free as ${cmds === 1 ? 'it runs, and what it deletes' : 'they run, and what they delete'} comes back only by regrowing.${p.actions.some((a) => a.empties_trash) ? ' One of them empties the Trash: what is in it now is gone for good.' : ''}</dd>` : ''}
+      ${cmds ? h`<dt><i class="sw frees_now"></i>${size(t.frees_now)}</dt><dd><b>${num(cmds, 'command')} with no undo.</b> The space is free as ${cmds === 1 ? 'it runs, and what it deletes' : 'they run, and what they delete'} comes back only by regrowing.${p.actions.some((a) => a.empties_trash) ? `${cmds === 1 ? ' It' : ' One of them'} empties the Trash: what is in it now is gone for good.` : ''}</dd>` : ''}
       ${moves ? h`<dt><i class="sw after_trash"></i>${size(t.after_trash)}</dt><dd>${trash}</dd>` : ''}
       ${names.length ? h`<dt><i class="sw"></i>${p.skipped.length} skipped</dt><dd>Left as ${names.length === 1 ? 'it is' : 'they are'}: ${names.join(', ')}. The plan says why.</dd>` : ''}</dl>
     <div class="gate"><label><input type="checkbox" id="read" ${S.read ? 'checked' : ''}><span>${cmds ? `I read the ${num(cmds, 'command')}. ${cmds === 1 ? 'It has' : 'They have'} no undo.` : 'I read the plan. Every action in it is a move that regrow undo puts back.'}</span></label>
