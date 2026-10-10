@@ -342,4 +342,20 @@ struct InstanceLockTests {
             #expect(try InstanceLock.acquire(in: state) != nil)
         }
     }
+
+    @Test("a lock file without write permission still locks")
+    func readOnlyLockFile() async throws {
+        try await withTemporaryDirectory { directory in
+            let state = directory.appendingPathComponent("state/regrow")
+            try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
+            let file = state.appendingPathComponent(InstanceLock.name).path
+            #expect(FileManager.default.createFile(atPath: file, contents: nil, attributes: [.posixPermissions: 0o444]))
+            var first = try InstanceLock.acquire(in: state)
+            #expect(first != nil)
+            #expect(try InstanceLock.acquire(in: state) == nil)
+
+            first = nil
+            #expect(try InstanceLock.acquire(in: state) != nil)
+        }
+    }
 }

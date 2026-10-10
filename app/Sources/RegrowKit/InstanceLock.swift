@@ -29,7 +29,8 @@ public final class InstanceLock {
         } catch {
             throw Failure(description: "create \(directory.path): \(error.localizedDescription)")
         }
-        let descriptor = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        // `flock` needs no write access, so a read-only file still locks.
+        let descriptor = open(path, O_RDONLY | O_CREAT | O_CLOEXEC, 0o644)
         guard descriptor >= 0 else {
             throw Failure(description: "open \(path): \(String(cString: strerror(errno)))")
         }

@@ -138,14 +138,25 @@ final class Shell: ObservableObject {
                 lock = try InstanceLock.acquire(in: state)
                 if lock == nil {
                     log("regrow is already running on \(state.path); this one quits")
-                    DispatchQueue.main.async { exit(0) }
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            let alert = NSAlert()
+                            alert.messageText = "regrow is already running"
+                            alert.informativeText = "Another copy of regrow uses \(state.path), so this one quits."
+                            NSApp.activate(ignoringOtherApps: true)
+                            alert.runModal()
+                            exit(0)
+                        }
+                    }
                     return
                 }
             } catch {
                 lock = nil
-                log("no single-instance check: \(error)")
+                log("no single-instance check, so no engine an earlier run left is stopped: \(error)")
             }
-            Self.clearEarlierRun(state: state, engine: engine, log: log)
+            if lock != nil {
+                Self.clearEarlierRun(state: state, engine: engine, log: log)
+            }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.instanceLock = lock

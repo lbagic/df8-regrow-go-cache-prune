@@ -53,6 +53,6 @@ Both smoke checks start the installed app through LaunchServices, so the grants 
 - An alert is a crossing, posted once as a notification. The menu shows the figures, not past alerts.
 - The first tick on an empty history counts a line free space is already under as crossed, so a state directory with no history and under 50 GiB free posts "Disk space is low" once.
 - With autotrim on and its gate locked, the menu says why under the switch. Once free space is low enough that a prune would have run, the tick ends in an error instead: the menu reads "Autotrim did not run", and the notification comes once, not with every tick.
-- A second copy of the app started on the same state directory quits at once.
-- Quitting while a plan runs waits up to 30 s for the action in flight, then stops the engine. A steward command the engine had started runs on to its end, and the oplog then lacks that action's end.
-- `just app` finds the running app through the pid file in the state directory its own terminal names; an app whose login shell set another `XDG_STATE_HOME` is not stopped first.
+- A second copy of the app started on the same state directory says so and quits. Where `app.lock` cannot be locked at all, both copies run, and neither stops an engine an earlier run left.
+- Quitting while a plan runs waits up to 30 s for the action in flight, then stops the engine. A steward command the engine had started runs on, or stops part-way once it writes to the engine that is gone; either way the oplog lacks that action's end.
+- `just app` finds the running app through the pid file in the state directory its own terminal names. It does not stop first an app whose login shell set another `XDG_STATE_HOME`, a copy running from another path, or an app that has not started its engine yet: the first seconds after launch, or up to 37 s while it waits out an engine an earlier run left.
