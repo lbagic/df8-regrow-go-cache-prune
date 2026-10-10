@@ -74,7 +74,10 @@ enum Smoke {
             return (false, "\(status), and only ~/Applications/Regrow.app asks")
         }
         let granted = waitFor(120) { done in notifier.askPermission { done($0) } }
-        return (granted ?? false, granted == nil ? "the question was not answered" : "denied")
+        guard let granted else {
+            return (false, "the question was not answered")
+        }
+        return (granted, granted ? "allowed" : "denied")
     }
 
     /// The value `start` hands to its callback, nil after `seconds`.
