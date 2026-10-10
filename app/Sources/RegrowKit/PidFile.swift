@@ -71,11 +71,13 @@ public enum EarlierProcess {
     }
 
     /// The stop ladder from its first SIGTERM: stdin is not ours to
-    /// close.
+    /// close. Nothing says whether the engine is running an action, which
+    /// the second SIGTERM would cut short, so the first gets the wait an
+    /// execute in flight gets.
     public static func stop(_ pid: pid_t, executable: String, timings: StopTimings = .standard) -> Outcome {
         guard isRunning(pid, executable: executable) else { return .notOurs }
         let rungs: [(Int32, TimeInterval, StopRung)] = [
-            (SIGTERM, timings.term, .terminated),
+            (SIGTERM, max(timings.term, timings.stdinDuringExecute), .terminated),
             (SIGTERM, timings.secondTerm, .terminatedTwice),
             (SIGKILL, timings.kill, .killed),
         ]

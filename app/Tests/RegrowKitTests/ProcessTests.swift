@@ -13,6 +13,10 @@ private enum Children {
     static let needsSecondSigterm =
         "#!/bin/bash\nn=0\ntrap 'n=$((n+1)); if [ $n -ge 2 ]; then exit 0; fi' TERM\necho ready\n" + loop
     static let ignoresBoth = "#!/bin/sh\ntrap '' TERM\necho ready\n" + loop
+    /// As the engine runs an action: the first SIGTERM lets the action
+    /// end (2 s) and the process exit 0; a second one kills it.
+    static let finishesItsAction =
+        "#!/bin/bash\ntrap 'trap - TERM; sleep 2; exit 0' TERM\necho ready\n" + loop
 }
 
 private let quick = StopTimings(stdin: 1, term: 1, secondTerm: 1)
@@ -295,6 +299,23 @@ struct PidFileTests {
         #expect(exit.signal == SIGTERM)
     }
 
+    @Test("an earlier engine is given an execute's wait before the second SIGTERM, so its action ends")
+    func earlierEngineFinishesItsAction() async throws {
+        try await withTemporaryDirectory { directory in
+            let run = try launch(Children.finishesItsAction, in: directory)
+            try #require(await run.lines.wait(5) { $0.contains("ready") } != nil)
+            defer { run.child.signal(SIGKILL) }
+
+            let pid = run.child.pid
+            let outcome = await offThread {
+                EarlierProcess.stop(pid, executable: "/bin/bash", timings: StopTimings(stdin: 5, term: 1, secondTerm: 1))
+            }
+            #expect(outcome == .stopped(.terminated))
+            let exit = try #require(await run.exits.wait(5) { !$0.isEmpty })[0]
+            #expect(exit.status == 0)
+        }
+    }
+
     @Test("a pid no process has is not ours")
     func noSuchProcess() async throws {
         let exits = Inbox<ChildProcess.Exit>()
@@ -303,5 +324,22 @@ struct PidFileTests {
             queue: DispatchQueue(label: "pid-test"), onLine: { _ in }, onExit: { exits.add($0) })
         try #require(await exits.wait(5) { !$0.isEmpty } != nil)
         #expect(EarlierProcess.stop(gone.pid, executable: "/usr/bin/true", timings: quick) == .notOurs)
+    }
+}
+
+@Suite("Instance lock")
+struct InstanceLockTests {
+    @Test("a second copy on the same state directory finds the lock taken until the first lets it go")
+    func oneCopyPerStateDirectory() async throws {
+        try await withTemporaryDirectory { directory in
+            let state = directory.appendingPathComponent("state/regrow")
+            var first = try InstanceLock.acquire(in: state)
+            #expect(first != nil)
+            #expect(try InstanceLock.acquire(in: state) == nil)
+            #expect(try InstanceLock.acquire(in: directory.appendingPathComponent("other/regrow")) != nil)
+
+            first = nil
+            #expect(try InstanceLock.acquire(in: state) != nil)
+        }
     }
 }

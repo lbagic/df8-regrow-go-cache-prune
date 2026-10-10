@@ -41,6 +41,8 @@ final class Shell: ObservableObject {
     private var downLine: String?
     private var lockNoticed = false
     private var stopping = false
+    private var instanceLock: InstanceLock?
+    private var askingFinder = false
 
     private init() {
         log = LogFile(url: config.log)
@@ -74,15 +76,29 @@ final class Shell: ObservableObject {
         } else {
             log("not ~/Applications/Regrow.app: asking for no notification permission and registering no login item")
         }
+        let log = self.log
+        DispatchQueue.global(qos: .userInitiated).async {
+            let began = Date()
+            let captured = LoginEnvironment.capture()
+            let answered = Date()
+            log("the login shell answered in \(Self.milliseconds(since: began)) ms")
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let waited = Self.milliseconds(since: answered)
+                    if waited >= 1000 {
+                        log("the main thread took \(waited) ms to take the login shell's answer")
+                    }
+                    self.environmentRead(captured)
+                }
+            }
+        }
         if config.openScan {
             openScan()
         }
-        DispatchQueue.global(qos: .userInitiated).async {
-            let captured = LoginEnvironment.capture()
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { self.environmentRead(captured) }
-            }
-        }
+    }
+
+    private nonisolated static func milliseconds(since start: Date) -> Int {
+        Int(Date().timeIntervalSince(start) * 1000)
     }
 
     /// A login item the owner removed in System Settings stays removed:
@@ -115,29 +131,34 @@ final class Shell: ObservableObject {
         stateDirectory = state
 
         let engine = config.engine
-        let app = Bundle.main.executablePath ?? CommandLine.arguments[0]
         let log = self.log
         DispatchQueue.global(qos: .userInitiated).async {
-            let alreadyRunning = Self.clearEarlierRun(state: state, engine: engine, app: app, log: log)
+            let lock: InstanceLock?
+            do {
+                lock = try InstanceLock.acquire(in: state)
+                if lock == nil {
+                    log("regrow is already running on \(state.path); this one quits")
+                    DispatchQueue.main.async { exit(0) }
+                    return
+                }
+            } catch {
+                lock = nil
+                log("no single-instance check: \(error)")
+            }
+            Self.clearEarlierRun(state: state, engine: engine, log: log)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    if alreadyRunning {
-                        exit(0)
-                    }
+                    self.instanceLock = lock
                     self.startEngine(environment)
                 }
             }
         }
     }
 
-    /// Stops an engine that outlived the app that started it. True when
-    /// that app is itself still running, so this launch has no place.
-    private nonisolated static func clearEarlierRun(state: URL, engine: String, app: String, log: LogFile) -> Bool {
-        guard let earlier = PidFile.read(from: state), earlier.app != getpid() else { return false }
-        if EarlierProcess.isRunning(earlier.app, executable: app) {
-            log("regrow is already running as pid \(earlier.app); this one quits")
-            return true
-        }
+    /// Stops an engine that outlived the app that started it. Called with
+    /// the instance lock held, so the app the pid file names has gone.
+    private nonisolated static func clearEarlierRun(state: URL, engine: String, log: LogFile) {
+        guard let earlier = PidFile.read(from: state), earlier.app != getpid() else { return }
         switch EarlierProcess.stop(earlier.engine, executable: engine) {
         case .notOurs:
             break
@@ -146,7 +167,6 @@ final class Shell: ObservableObject {
         case .survived:
             log("an engine left by an earlier run, pid \(earlier.engine), is still running after SIGKILL")
         }
-        return false
     }
 
     private func startEngine(_ environment: [String: String]) {
@@ -203,7 +223,14 @@ final class Shell: ObservableObject {
         for output in outputs {
             switch output {
             case .engine(let line):
-                if let request = Wire.decode(Wire.Request.self, from: line) {
+                let request = Wire.decode(Wire.Request.self, from: line)
+                // Quit has begun: what was waiting stays unsent, rather than
+                // start in an engine that is about to be stopped.
+                guard !stopping else {
+                    log("not sent, quitting: \(request?.type ?? "a request") id=\(request?.id ?? "-")")
+                    continue
+                }
+                if let request {
                     log("→ \(request.type) id=\(request.id)")
                 }
                 supervisor?.send(line)
@@ -342,9 +369,17 @@ final class Shell: ObservableObject {
             }
             standing.forEach { window?.deliver($0) }
         case "automation":
+            // One question at a time: macOS's dialog may still be open, and
+            // its answer reaches whichever page is open then.
+            guard !askingFinder else {
+                log("still waiting for Finder's answer")
+                return
+            }
+            askingFinder = true
             log("asking Finder whether regrow may control it")
             Automation.askFinder(queue: .main) { allowed in
                 MainActor.assumeIsolated {
+                    self.askingFinder = false
                     self.log("automation \(allowed ? "allowed" : "denied")")
                     self.window?.deliver(Router.shellEvent("automation", ["allowed": allowed]))
                 }

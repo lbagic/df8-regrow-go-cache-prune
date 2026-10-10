@@ -18,6 +18,7 @@ final class ScanWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKScri
     private let onClose: () -> Void
 
     private var firstLoadAllowed = false
+    private var lastReload = Date.distantPast
 
     /// `onPageGone` is called when the page's requests have nobody left
     /// to answer: the window closed, or the page's process ended.
@@ -105,8 +106,14 @@ final class ScanWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKScri
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        log("the page's process ended; loading the page again")
         onPageGone()
+        // A page that ends its process as it loads would load for ever.
+        guard Date().timeIntervalSince(lastReload) > 10 else {
+            log("the page's process ended again within 10 s; close the window and open it again to retry")
+            return
+        }
+        log("the page's process ended; loading the page again")
+        lastReload = Date()
         load()
     }
 
