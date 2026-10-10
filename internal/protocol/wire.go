@@ -101,9 +101,14 @@ type startEvent struct {
 
 type findingEvent struct {
 	head
-	ScanID  string         `json:"scan_id"`
-	Index   int            `json:"index"`
-	TookMS  int64          `json:"took_ms"`
+	ScanID string `json:"scan_id"`
+	Index  int    `json:"index"`
+	TookMS int64  `json:"took_ms"`
+	// Bucket is the total the rule's bytes are counted in.
+	Bucket string `json:"bucket"`
+	// Select is the atoms that tick the row, absent when it cannot be
+	// ticked: a peer sends only atoms it was given here.
+	Select  []string       `json:"select,omitempty"`
 	Finding engine.Finding `json:"finding"`
 }
 

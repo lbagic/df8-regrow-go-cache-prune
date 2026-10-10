@@ -345,12 +345,12 @@ func (s *session) runScan(ctx context.Context, cancel context.CancelFunc, op *op
 		}
 		f = encodable(f)
 		f.FillItemKeys(s.srv.Host.Home)
-		ev := findingEvent{head{"finding", op.re}, sc.id, i, took.Milliseconds(), f}
+		ev := findingEvent{head{"finding", op.re}, sc.id, i, took.Milliseconds(), engine.Bucket(f.Rule), engine.Selectable(f), f}
 		if !s.emit(ev) {
 			// The row still has to arrive, or the peer waits on this
 			// rule forever; the engine keeps what the peer saw.
 			f = engine.Finding{Rule: f.Rule, Err: "finding could not be encoded"}
-			ev.Finding = f
+			ev.Select, ev.Finding = engine.Selectable(f), f
 			s.emit(ev)
 		}
 		findings[i] = f

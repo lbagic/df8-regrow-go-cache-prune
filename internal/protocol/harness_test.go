@@ -33,6 +33,8 @@ type event struct {
 	Rules     int              `json:"rules"`
 	Index     int              `json:"index"`
 	TookMS    int64            `json:"took_ms"`
+	Bucket    string           `json:"bucket"`
+	Select    []string         `json:"select"`
 	Finding   *engine.Finding  `json:"finding"`
 	Totals    *engine.Totals   `json:"totals"`
 	Exclusive map[string]int64 `json:"exclusive"`

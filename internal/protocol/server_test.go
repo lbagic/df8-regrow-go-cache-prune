@@ -181,6 +181,79 @@ func TestScanPlanExecuteOverPipes(t *testing.T) {
 	}
 }
 
+// A finding event says which total its rule counts in and which atoms
+// tick its row, from the finding the engine keeps for planning.
+func TestFindingEventsCarryBucketAndSelect(t *testing.T) {
+	m := newMachine(t)
+	path := func(name string) string { return filepath.Join(m.home, "proj", name) }
+	findings := []engine.Finding{
+		{Rule: engine.Rule{ID: "fixture-steward", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}},
+			Items: []engine.Item{{Path: path("steward"), Bytes: 9}, {Path: path("steward-2"), Bytes: 1}}},
+		{Rule: engine.Rule{ID: "fixture-trash", Risk: engine.RiskCaution},
+			Items: []engine.Item{{Path: path("a"), Bytes: 5}, {Path: path("gated"), Partial: true}, {Path: path("b"), Bytes: 3, Partial: true}}},
+		{Rule: engine.Rule{ID: "fixture-shown", Risk: engine.RiskSurfaceOnly}, Items: []engine.Item{{Path: path("shown"), Bytes: 4}}},
+		{Rule: engine.Rule{ID: "fixture-phantom", Category: engine.CategoryPhantomSpace, Risk: engine.RiskCaution,
+			ToolQuery: "fixture", NativeCommand: engine.Argv{"fixture-thin", "{arg}"}},
+			Items: []engine.Item{{Label: "snapshot", Arg: "snap-1", Bytes: 2}}},
+		{Rule: engine.Rule{ID: "fixture-partial-steward", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}},
+			Items: []engine.Item{{Path: path("c"), Bytes: 1}, {Path: path("gated-2"), Partial: true}}},
+		{Rule: engine.Rule{ID: "fixture-failed", Risk: engine.RiskSafe}, Err: "tool gave no answer"},
+		{Rule: engine.Rule{ID: "fixture-empty", Risk: engine.RiskSafe}},
+	}
+	want := []struct {
+		bucket string
+		sel    string
+	}{
+		{engine.BucketFreesNow, "fixture-steward"},
+		{engine.BucketAfterTrash, "fixture-trash/~/proj/a,fixture-trash/~/proj/b"},
+		{engine.BucketShownOnly, ""},
+		{engine.BucketMacOSManaged, "fixture-phantom/snap-1"},
+		{engine.BucketFreesNow, ""},
+		{engine.BucketAfterTrash, ""},
+		{engine.BucketAfterTrash, ""},
+	}
+	srv := m.server()
+	srv.Catalog = make([]engine.Rule, len(findings))
+	for i, f := range findings {
+		srv.Catalog[i] = f.Rule
+	}
+	srv.Scan = scanOf(findings)
+	p := start(t, srv)
+	p.expect("hello")
+
+	p.send(`{"type":"scan","id":"s"}`)
+	scan := p.expect("start/s", "finding/s", "finding/s", "finding/s", "finding/s", "finding/s", "finding/s", "finding/s", "done/s")
+	var offered []string
+	for i, e := range scan[1:8] {
+		if e.Bucket != want[i].bucket {
+			t.Errorf("%s: bucket = %q, want %q", e.Finding.Rule.ID, e.Bucket, want[i].bucket)
+		}
+		if got := strings.Join(e.Select, ","); got != want[i].sel {
+			t.Errorf("%s: select = %q, want %q", e.Finding.Rule.ID, got, want[i].sel)
+		}
+		if want[i].sel == "" && strings.Contains(e.raw, `"select"`) {
+			t.Errorf("a row that cannot be ticked carries no select: %s", e.raw)
+		}
+		offered = append(offered, e.Select...)
+	}
+
+	// Every atom handed out plans: none is unmatched, and the unreadable
+	// item no atom names stays out of the plan.
+	sent, err := json.Marshal(offered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := p.planned("p", scan[0].ScanID, string(sent)).Plan
+	if len(plan.Actions) != 4 || len(plan.Unmatched) != 0 {
+		t.Fatalf("plan of every offered atom = %+v, want four actions", plan)
+	}
+	for _, a := range plan.Actions {
+		if a.Path == path("gated") {
+			t.Errorf("an unreadable item was planned: %+v", a)
+		}
+	}
+}
+
 func TestPlanSelection(t *testing.T) {
 	m := newMachine(t)
 	sudoRule := engine.Rule{ID: "fixture-sudo", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}, Sudo: true}
