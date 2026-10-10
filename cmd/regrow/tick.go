@@ -50,6 +50,10 @@ func tickLines(t headroom.Tick, noHistory, autotrim bool) []string {
 		}
 	case t.DaysToFull != nil:
 		lines = append(lines, fmt.Sprintf("Days to full: %.1f at the current rate.", *t.DaysToFull))
+	case t.NoForecast == headroom.ShortHistory:
+		lines = append(lines, "Days to full: no forecast yet (it needs three samples over three hours since free space last jumped up).")
+	case t.NoForecast == headroom.NotFalling:
+		lines = append(lines, "Days to full: no forecast (free space is steady or rising).")
 	default:
 		lines = append(lines, "Days to full: no forecast (it needs three hours of samples with free space falling).")
 	}

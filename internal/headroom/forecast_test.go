@@ -70,19 +70,35 @@ func TestForecastSmallRisesAreNotJumps(t *testing.T) {
 }
 
 func TestForecastSaysNothingWithoutATrend(t *testing.T) {
+	// A clean two hours ago: the day before it no longer counts.
+	afterAJump := append(ramp(100, -1, 25), ramp(116, -2, 3)...)
 	tests := []struct {
 		name string
 		s    []Sample
+		why  string
 	}{
-		{"no samples", nil},
-		{"two samples", history(3*time.Hour, 100, 90)},
-		{"under three hours", history(15*time.Minute, ramp(100, -1, 8)...)},
-		{"flat", history(time.Hour, 80, 80, 80, 80, 80)},
-		{"rising", history(time.Hour, ramp(80, 0.5, 6)...)},
+		{"no samples", nil, ShortHistory},
+		{"two samples", history(3*time.Hour, 100, 90), ShortHistory},
+		{"under three hours", history(15*time.Minute, ramp(100, -1, 8)...), ShortHistory},
+		{"two hours since a jump", history(time.Hour, afterAJump...), ShortHistory},
+		{"flat", history(time.Hour, 80, 80, 80, 80, 80), NotFalling},
+		{"rising", history(time.Hour, ramp(80, 0.5, 6)...), NotFalling},
 	}
 	for _, tt := range tests {
 		if d, ok := Forecast(tt.s); ok {
 			t.Errorf("%s: Forecast = %v, want no forecast", tt.name, d)
 		}
+		if d, why := ForecastOrWhy(tt.s); d != 0 || why != tt.why {
+			t.Errorf("%s: ForecastOrWhy = %v, %q; want 0, %q", tt.name, d, why, tt.why)
+		}
+	}
+}
+
+func TestForecastOrWhyHasNoReasonWithAForecast(t *testing.T) {
+	s := history(time.Hour, ramp(100, -1, 25)...)
+	days, why := ForecastOrWhy(s)
+	want, ok := Forecast(s)
+	if why != "" || !ok || days != want {
+		t.Fatalf("ForecastOrWhy = %v, %q; Forecast = %v, %v: with a forecast the two agree and there is no reason", days, why, want, ok)
 	}
 }

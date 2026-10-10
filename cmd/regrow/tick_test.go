@@ -49,6 +49,15 @@ func TestTickLines(t *testing.T) {
 	if len(without) != 2 || !hasLine(without, "Days to full: no forecast") {
 		t.Errorf("a tick with no forecast, alert or prune prints two lines, got:\n%s", strings.Join(without, "\n"))
 	}
+	for why, want := range map[string]string{
+		headroom.ShortHistory: "no forecast yet (it needs three samples over three hours since free space last jumped up)",
+		headroom.NotFalling:   "no forecast (free space is steady or rising)",
+	} {
+		lines := tickLines(headroom.Tick{Sample: sample, NoForecast: why}, false, false)
+		if len(lines) != 2 || !hasLine(lines, "Days to full: "+want) {
+			t.Errorf("%s: the tick must say why there is no forecast, got:\n%s", why, strings.Join(lines, "\n"))
+		}
+	}
 
 	noHistory := tickLines(headroom.Tick{Sample: sample,
 		Pruned: &headroom.PruneResult{RuleID: "go-build-cache", Run: "r1", Files: 3, Bytes: gib}}, true, true)

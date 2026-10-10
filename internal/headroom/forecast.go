@@ -20,24 +20,40 @@ const (
 	secondsADay = 86400.0
 )
 
+// Why there is no forecast, the values of Tick.NoForecast.
+const (
+	// ShortHistory: fewer than minSamples since free space last jumped
+	// up, or they span under minSpan.
+	ShortHistory = "short_history"
+	// NotFalling: enough history, and free space is steady or rising.
+	NotFalling = "not_falling"
+)
+
 // Forecast fits the fall of free space over the samples since the last
 // upward jump, at most Window back, and returns how many days the
 // current free space lasts at that rate. ok is false when the window
 // is too short to say, or free space is not falling.
 func Forecast(s []Sample) (daysToFull float64, ok bool) {
+	days, why := ForecastOrWhy(s)
+	return days, why == ""
+}
+
+// ForecastOrWhy is Forecast that says why there is none: noForecast is
+// ShortHistory or NotFalling, and empty with a forecast.
+func ForecastOrWhy(s []Sample) (daysToFull float64, noForecast string) {
 	w := forecastWindow(s)
 	if len(w) < minSamples {
-		return 0, false
+		return 0, ShortHistory
 	}
 	last := w[len(w)-1]
 	if last.At.Sub(w[0].At) < minSpan {
-		return 0, false
+		return 0, ShortHistory
 	}
 	perSecond := slope(w)
 	if perSecond >= 0 {
-		return 0, false
+		return 0, NotFalling
 	}
-	return float64(last.Free) / (-perSecond * secondsADay), true
+	return float64(last.Free) / (-perSecond * secondsADay), ""
 }
 
 func forecastWindow(s []Sample) []Sample {

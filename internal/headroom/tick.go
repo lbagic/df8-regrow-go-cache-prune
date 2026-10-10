@@ -4,7 +4,11 @@ package headroom
 // there is one, the alerts that crossed, and what autotrim did.
 type Tick struct {
 	Sample
-	DaysToFull *float64     `json:"days_to_full,omitempty"`
+	DaysToFull *float64 `json:"days_to_full,omitempty"`
+	// NoForecast says why DaysToFull is absent, ShortHistory or
+	// NotFalling. Empty with a forecast, and when the history could not
+	// be read, which is no judgement of it.
+	NoForecast string       `json:"no_forecast,omitempty"`
 	Alerts     []Alert      `json:"alerts,omitempty"`
 	Pruned     *PruneResult `json:"pruned,omitempty"`
 }
