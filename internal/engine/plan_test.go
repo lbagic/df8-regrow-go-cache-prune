@@ -597,3 +597,127 @@ func TestSelectableOverSafeFindingsPlansTheDefaultSelection(t *testing.T) {
 		t.Errorf("unmatched: %v and %v", fromTicks.Unmatched, fromDefault.Unmatched)
 	}
 }
+
+func TestBuildPlanWithLookPath(t *testing.T) {
+	const reason = "`%s` is not on the PATH regrow was started with"
+	whole := Finding{
+		Rule:  Rule{ID: "whole-gone", Risk: RiskSafe, NativeCommand: Argv{"gone-tool", "clean"}},
+		Items: []Item{{Path: "/Users/t/Library/Caches/gone", Bytes: 100}},
+	}
+	perItem := Finding{
+		Rule: Rule{ID: "item-gone", Risk: RiskCaution, ToolQuery: "q", NativeCommand: Argv{"gone-ctl", "rm", "{arg}"}},
+		Items: []Item{
+			{Label: "one", Arg: "x1", Bytes: 10},
+			{Label: "two", Arg: "x2", Bytes: 20},
+		},
+	}
+	// Lives inside whole's item: a refused command covers nothing.
+	nested := Finding{
+		Rule:  Rule{ID: "nested", Risk: RiskSafe},
+		Items: []Item{{Path: "/Users/t/Library/Caches/gone/inner", Bytes: 5}},
+	}
+	found := Finding{
+		Rule:  Rule{ID: "found", Risk: RiskSafe, NativeCommand: Argv{"here-tool", "clean"}},
+		Items: []Item{{Path: "/Users/t/Library/Caches/here", Bytes: 3}},
+	}
+	// Needs rights and is missing: missing is what the owner can fix.
+	sudoGone := Finding{
+		Rule:  Rule{ID: "sudo-gone", Risk: RiskSafe, NativeCommand: Argv{"gone-tool", "wipe"}, Sudo: true},
+		Items: []Item{{Path: "/Users/t/Library/Caches/sudo-gone", Bytes: 9}},
+	}
+	trashed := Finding{
+		Rule:  Rule{ID: "trashed", Risk: RiskSafe},
+		Items: []Item{{Path: "/Users/t/Library/trashed", Bytes: 4}},
+	}
+	findings := []Finding{whole, perItem, nested, found, sudoGone, trashed}
+	var looked []string
+	opts := PlanOptions{NoSudo: true, LookPath: func(file string) (string, error) {
+		looked = append(looked, file)
+		if strings.HasPrefix(file, "gone-") {
+			return "", fmt.Errorf("exec: %q: executable file not found in $PATH", file)
+		}
+		return "/opt/bin/" + file, nil
+	}}
+
+	tests := []struct {
+		name        string
+		selected    map[string]bool
+		wantActions []string
+		wantSkips   []Skip
+		wantTotals  Totals
+	}{
+		{
+			name:        "whole selections skip the rule",
+			selected:    selectRules(findings...),
+			wantActions: []string{"nested", "found", "trashed"},
+			wantSkips: []Skip{
+				{RuleID: "whole-gone", Reason: fmt.Sprintf(reason, "gone-tool")},
+				{RuleID: "item-gone", Reason: fmt.Sprintf(reason, "gone-ctl")},
+				{RuleID: "sudo-gone", Reason: fmt.Sprintf(reason, "gone-tool")},
+			},
+			wantTotals: Totals{FreesNow: 3, AfterTrash: 9},
+		},
+		{
+			name:      "a partial pick skips the item",
+			selected:  map[string]bool{"item-gone/x2": true},
+			wantSkips: []Skip{{RuleID: "item-gone", ItemKey: "x2", Reason: fmt.Sprintf(reason, "gone-ctl")}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := BuildPlanWith(testHost, findings, tt.selected, opts)
+			var got []string
+			for _, a := range plan.Actions {
+				got = append(got, a.RuleID)
+			}
+			if !reflect.DeepEqual(got, tt.wantActions) {
+				t.Errorf("actions = %v, want %v", got, tt.wantActions)
+			}
+			if !reflect.DeepEqual(plan.Skipped, tt.wantSkips) {
+				t.Errorf("skipped = %+v, want %+v", plan.Skipped, tt.wantSkips)
+			}
+			if plan.Totals() != tt.wantTotals {
+				t.Errorf("totals = %+v, want %+v: a skipped action adds nothing", plan.Totals(), tt.wantTotals)
+			}
+			if len(plan.Unmatched) != 0 {
+				t.Errorf("a refused selector is not a typo: unmatched = %v", plan.Unmatched)
+			}
+		})
+	}
+	for _, file := range looked {
+		if file == "osascript" || file == "sudo" {
+			t.Errorf("looked up %q: only a rule's own program is looked up", file)
+		}
+	}
+
+	// Without the option nothing is looked up and every action is planned.
+	if plan := BuildPlan(testHost, findings, selectRules(findings...)); len(plan.Actions) != 6 || len(plan.Skipped) != 1 {
+		t.Fatalf("BuildPlan without options = %+v, want six actions and the nested item covered", plan)
+	}
+}
+
+func TestSudoSkipNamesTheEngineItself(t *testing.T) {
+	f := Finding{
+		Rule:  Rule{ID: "whole-sudo", Risk: RiskCaution, NativeCommand: Argv{"mdutil", "-E", "/"}, Sudo: true},
+		Items: []Item{{Path: "/Users/t/Library/Metadata/index", Bytes: 1}},
+	}
+	tests := []struct {
+		name string
+		opts PlanOptions
+		want string
+	}{
+		{"without Self it is regrow on PATH", PlanOptions{NoSudo: true},
+			"needs administrator rights — run `regrow clean whole-sudo` in Terminal"},
+		{"Self is quoted for the shell and comes before the flags",
+			PlanOptions{NoSudo: true, Self: "/Users/t/Applications/My Regrow.app/Contents/MacOS/regrow-engine", CleanFlags: []string{"--beta-rules"}},
+			"needs administrator rights — run `'/Users/t/Applications/My Regrow.app/Contents/MacOS/regrow-engine' clean --beta-rules whole-sudo` in Terminal"},
+		{"a plain path stays bare", PlanOptions{NoSudo: true, Self: "/opt/regrow/bin/regrow"},
+			"needs administrator rights — run `/opt/regrow/bin/regrow clean whole-sudo` in Terminal"},
+	}
+	for _, tt := range tests {
+		plan := BuildPlanWith(testHost, []Finding{f}, selectRules(f), tt.opts)
+		if len(plan.Actions) != 0 || len(plan.Skipped) != 1 || plan.Skipped[0].Reason != tt.want {
+			t.Errorf("%s: plan = %+v, want the one skip %q", tt.name, plan, tt.want)
+		}
+	}
+}
