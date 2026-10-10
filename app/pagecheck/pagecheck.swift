@@ -481,7 +481,10 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
     /// Sends the oldest answer `holdPlan` kept back, late.
     func releasePlan() {
         expect(!planHeld.isEmpty, "no plan answer was held")
-        if !planHeld.isEmpty { send(planHeld.removeFirst()) }
+        guard !planHeld.isEmpty else { return }
+        let lines = planHeld.removeFirst()
+        planID = parse(lines[0]).str("plan_id")
+        send(lines)
     }
 
     private func answer(execute id: String, _ body: [String: Any]) {
@@ -999,8 +1002,9 @@ struct Scenario {
             await r.shoot()
         },
         Scenario(name: "stale-review") { r in
-            // A fresh plan is asked for, the owner goes back and changes the ticks before it comes, and asks again:
-            // the late answer to the first request is not the plan drawn, and the answer to the second is.
+            // A fresh plan is asked for, the owner goes back and touches the ticks before it comes, and asks again:
+            // the late answer to the first request is not the plan drawn, and the answer to the second is. The two
+            // answers differ only by the request they answer, which is all the page goes by.
             await toPlan(r)
             await r.jump(minutes: 11)
             await r.wait(for: "Plan again on a plan that is too old", "!!document.querySelector('[data-do=again]')")
@@ -1055,7 +1059,8 @@ struct Scenario {
             await r.settle()
             r.has(await r.text(".note"), "selectors matched nothing in this scan: sim-devices/AAA-111", "the engine's message")
             r.same(await r.screen(), "findings", "the screen")
-            r.expect(!(await r.text(".tray .say")).contains("counting"), "the tray still counts after the engine refused the review")
+            let frees = human(r.transcript.event("plan-all", "plan").obj("totals").int("frees_now"))
+            r.has(await r.text(".tray .say"), frees + " frees now", "the tray after the engine refused the review")
             await r.shoot()
         },
         Scenario(name: "other-error") { r in
@@ -1075,13 +1080,13 @@ struct Scenario {
             r.send(["event": "shell", "state": "engine_down", "message": "the engine exited with status 2"])
             await r.settle()
             r.same(await r.screen(), "down", "the screen")
-            r.has(await r.text(".note"), "\(done) of 25 actions had been done", "what the run had done")
+            r.has(await r.text(".note"), "after reporting \(done) of 25 actions done", "what the run had done")
             r.has(await r.text(".note .mono"), "regrow undo \(r.planID)", "the undo command")
             await r.shoot()
             r.send([r.transcript.lines("hello")[0]])
             await r.settle()
             r.same(await r.screen(), "findings", "the screen after the engine came back")
-            r.has(await r.text(".note"), "\(done) of 25 actions had been done", "what the run had done, after the next scan")
+            r.has(await r.text(".note"), "after reporting \(done) of 25 actions done", "what the run had done, after the next scan")
         },
         Scenario(name: "engine-down") { r in
             await results(r)

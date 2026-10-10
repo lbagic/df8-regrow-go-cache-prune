@@ -131,6 +131,7 @@ final class Shell: ObservableObject {
         stateDirectory = state
 
         let engine = config.engine
+        let app = Bundle.main.executablePath ?? CommandLine.arguments[0]
         let log = self.log
         DispatchQueue.global(qos: .userInitiated).async {
             let lock: InstanceLock?
@@ -138,24 +139,24 @@ final class Shell: ObservableObject {
                 lock = try InstanceLock.acquire(in: state)
                 if lock == nil {
                     log("regrow is already running on \(state.path); this one quits")
-                    DispatchQueue.main.async {
-                        MainActor.assumeIsolated {
-                            let alert = NSAlert()
-                            alert.messageText = "regrow is already running"
-                            alert.informativeText = "Another copy of regrow uses \(state.path), so this one quits."
-                            NSApp.activate(ignoringOtherApps: true)
-                            alert.runModal()
-                            exit(0)
-                        }
+                    // This copy holds nothing to stop, so a signal ends it
+                    // at once, also while nobody answers the alert.
+                    signal(SIGTERM, SIG_DFL)
+                    signal(SIGINT, SIG_DFL)
+                    MainRunLoop.perform {
+                        let alert = NSAlert()
+                        alert.messageText = "regrow is already running"
+                        alert.informativeText = "Another copy of regrow uses \(state.path), so this one quits."
+                        NSApp.activate(ignoringOtherApps: true)
+                        alert.runModal()
+                        exit(0)
                     }
                     return
                 }
+                Self.clearEarlierRun(state: state, engine: engine, app: app, log: log)
             } catch {
                 lock = nil
                 log("no single-instance check, so no engine an earlier run left is stopped: \(error)")
-            }
-            if lock != nil {
-                Self.clearEarlierRun(state: state, engine: engine, log: log)
             }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -167,9 +168,14 @@ final class Shell: ObservableObject {
     }
 
     /// Stops an engine that outlived the app that started it. Called with
-    /// the instance lock held, so the app the pid file names has gone.
-    private nonisolated static func clearEarlierRun(state: URL, engine: String, log: LogFile) {
+    /// the instance lock held; the app the pid file names can still run
+    /// all the same if it ran without the lock, and then keeps its engine.
+    private nonisolated static func clearEarlierRun(state: URL, engine: String, app: String, log: LogFile) {
         guard let earlier = PidFile.read(from: state), earlier.app != getpid() else { return }
+        if EarlierProcess.isRunning(earlier.app, executable: app) {
+            log("the app the pid file names, pid \(earlier.app), still runs; its engine is left alone")
+            return
+        }
         switch EarlierProcess.stop(earlier.engine, executable: engine) {
         case .notOurs:
             break

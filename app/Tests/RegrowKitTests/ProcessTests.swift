@@ -339,7 +339,7 @@ struct InstanceLockTests {
             #expect(try InstanceLock.acquire(in: directory.appendingPathComponent("other/regrow")) != nil)
 
             first = nil
-            #expect(try InstanceLock.acquire(in: state) != nil)
+            #expect(try await InstanceLock.acquireSoon(in: state) != nil)
         }
     }
 
@@ -355,7 +355,20 @@ struct InstanceLockTests {
             #expect(try InstanceLock.acquire(in: state) == nil)
 
             first = nil
-            #expect(try InstanceLock.acquire(in: state) != nil)
+            #expect(try await InstanceLock.acquireSoon(in: state) != nil)
         }
+    }
+}
+
+extension InstanceLock {
+    /// A process another test spawns holds a copy of every descriptor until
+    /// its exec closes the close-on-exec ones, so a lock let go can stay
+    /// taken for that moment.
+    static func acquireSoon(in directory: URL) async throws -> InstanceLock? {
+        for _ in 0..<200 {
+            if let lock = try acquire(in: directory) { return lock }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return nil
     }
 }
