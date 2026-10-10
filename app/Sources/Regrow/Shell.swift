@@ -236,7 +236,7 @@ final class Shell: ObservableObject {
             tickLine = line
             log("tick: \(humanBytes(tick.free)) free, \(tick.alerts?.count ?? 0) alerts")
             for notice in AlertText.notices(for: tick) {
-                notifier.post(notice)
+                notify(notice)
             }
             window?.deliver(line)
         case "done" where ofTick:
@@ -249,7 +249,7 @@ final class Shell: ObservableObject {
             // it is news once, not every quarter of an hour.
             if let notice = AlertText.notice(forError: head.code ?? "", message: head.message ?? "") {
                 if !lockNoticed {
-                    notifier.post(notice)
+                    notify(notice)
                 }
                 lockNoticed = true
             } else {
@@ -259,6 +259,16 @@ final class Shell: ObservableObject {
         default:
             break
         }
+    }
+
+    /// A copy outside `~/Applications` shares the installed app's bundle
+    /// id, and with it the permission to notify: it only logs.
+    private func notify(_ notice: Notice) {
+        guard Config.installed else {
+            log("not ~/Applications/Regrow.app, so no notification: \(notice.title)")
+            return
+        }
+        notifier.post(notice)
     }
 
     private func startWatch() {
