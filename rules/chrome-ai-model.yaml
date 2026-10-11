@@ -1,0 +1,20 @@
+# Chrome's on-device generative AI model (Gemini Nano): weights.bin and
+# its caches under OptGuideOnDeviceModel, about 4GB. Chrome downloads it
+# again when the folder is deleted, so surface-only, with the setting
+# that removes it (support.google.com/chrome/answer/16961953).
+id: chrome-ai-model
+title: Chrome on-device AI model
+category: ai
+risk: surface-only
+paths:
+  darwin:
+    - ~/Library/Application Support/Google/Chrome/OptGuideOnDeviceModel
+note: "Chrome ▸ Settings ▸ AI Innovations ▸ turn off On-device AI: Chrome deletes the model and does not download it again while the setting is off. Deleting the folder by hand does not stop the next download. On a managed Mac, the GenAILocalFoundationalModelSettings policy set to 1 does the same."
+regen:
+  story: Chrome downloads the model again while On-device AI is on and the Mac has room for it.
+  cost: n/a — regrow never deletes here
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/Library/Application Support/Google/Chrome/OptGuideOnDeviceModel/2025.8.8.1141/weights.bin

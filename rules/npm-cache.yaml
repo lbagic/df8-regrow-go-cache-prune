@@ -1,13 +1,15 @@
-# Content-addressed tarball cache. 1–5GB (docs/research/02 §2).
+# npm's content-addressed tarball cache. 1–5GB (docs/research/02 §2).
+# `npm cache clean --force` deletes ~/.npm/_cacache and nothing else
+# in ~/.npm: npx's folders are npx-cache's.
 id: npm-cache
 title: npm cache
 category: dev-caches
 risk: safe
 paths:
   darwin:
-    - ~/.npm
+    - ~/.npm/_cacache
   linux:
-    - ~/.npm
+    - ~/.npm/_cacache
 native_command: npm cache clean --force
 regen:
   story: npm re-fetches packages into the cache as installs need them.

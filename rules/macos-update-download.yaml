@@ -1,0 +1,22 @@
+# A macOS update Software Update downloaded by itself and has not
+# installed, in /System/Library/AssetsV2/com_apple_MobileAsset_MacSoftwareUpdate/<hash>.asset,
+# several GB. System Integrity Protection guards the folder, so even
+# `sudo rm` fails there: surface-only, with how to use the download up
+# and how to stop the next one. /Library/Updates is library-updates'
+# and "Install macOS" apps are macos-installers'.
+id: macos-update-download
+title: Downloaded macOS update
+category: macos
+risk: surface-only
+paths:
+  darwin:
+    - /System/Library/AssetsV2/com_apple_MobileAsset_MacSoftwareUpdate/*.asset
+note: "Installing the update uses the download up: System Settings ▸ General ▸ Software Update, or `softwareupdate --list` to see it first. To stop macOS downloading the next one, turn off Download new updates when available (Software Update ▸ Automatic updates ⓘ), or run `sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticDownload -bool false`."
+regen:
+  story: Software Update downloads updates by itself while Download new updates when available is on.
+  cost: n/a — regrow never deletes here, and System Integrity Protection refuses even sudo
+sudo: false
+beta: true
+fixture:
+  files:
+    - /System/Library/AssetsV2/com_apple_MobileAsset_MacSoftwareUpdate/0a1b2c3d4e5f60718293a4b5c6d7e8f901234567.asset/Info.plist

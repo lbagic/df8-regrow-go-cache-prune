@@ -1,0 +1,28 @@
+# Installers in ~/Downloads for apps already installed. The
+# downloaded-installers query (internal/scanner/tool_downloads.go)
+# matches a .zip by the app it holds and a .dmg or .pkg by its file
+# name against the apps in /Applications and ~/Applications, and keeps
+# a download newer than the installed app, one touched in the last 14
+# days, and every download it cannot match or read. Each download is
+# its own item, keyed by its path.
+id: downloaded-installers
+title: Installers of installed apps
+category: macos
+risk: caution
+tool_query: downloaded-installers
+# The download and its app are judged again right before each Trash move.
+pre_action: downloaded-installer-recheck
+note: A .dmg or .pkg is matched by its file name alone, and a disk image can hold more than the app (an uninstaller, a driver) - check the list before moving one.
+regen:
+  story: The app stays installed; its maker offers the installer again if you ever reinstall.
+  cost: one download per app you reinstall
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: Docker.dmg · Docker.app
+      path: ~/Downloads/Docker.dmg
+      bytes: 600000000
+    - label: Ollama-darwin.zip · Ollama.app
+      path: ~/Downloads/Ollama-darwin.zip
+      bytes: 200000000
