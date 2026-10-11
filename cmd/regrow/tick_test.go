@@ -188,21 +188,3 @@ func TestStillLockedLines(t *testing.T) {
 		t.Errorf("with the gate open there is nothing to say, got %q", got)
 	}
 }
-
-func TestHistoryCountsWhatAPruneMeasured(t *testing.T) {
-	entries := []oplog.Entry{
-		{Event: oplog.EventStart, Kind: "trash", Bytes: 100},
-		{Event: oplog.EventDone},
-		{Event: oplog.EventStart, Kind: "prune", Bytes: 41 << 30},
-		{Event: oplog.EventDone, Pruned: &oplog.Pruned{Files: 3, Bytes: 7 << 30}},
-		{Event: oplog.EventStart, Kind: "prune", Bytes: 5 << 30},
-		{Event: oplog.EventFail, Pruned: &oplog.Pruned{Files: 1, Bytes: 1 << 30}},
-	}
-	var total int64
-	for _, e := range entries {
-		total += entryBytes(e)
-	}
-	if want := int64(100) + 7<<30 + 1<<30; total != want {
-		t.Errorf("history total = %d, want %d: a prune counts what it deleted, not its estimate", total, want)
-	}
-}

@@ -271,9 +271,17 @@ func runHistory(asJSON bool) error {
 		fmt.Println("No history yet: nothing has been executed on this machine.")
 		return nil
 	}
+	for _, line := range historyLines(runs) {
+		fmt.Println(line)
+	}
+	return nil
+}
+
+// historyLines is one line per run, then what its size counts.
+func historyLines(runs []oplog.Run) []string {
+	lines := make([]string, 0, len(runs)+len(historyNote))
 	for _, r := range runs {
 		var done, failed, undone int
-		var bytes int64
 		for _, e := range r.Entries {
 			switch e.Event {
 			case oplog.EventDone:
@@ -285,7 +293,6 @@ func runHistory(asJSON bool) error {
 					undone++
 				}
 			}
-			bytes += entryBytes(e)
 		}
 		status := fmt.Sprintf("%d ok, %d failed", done, failed)
 		if undone > 0 {
@@ -294,7 +301,12 @@ func runHistory(asJSON bool) error {
 		if rest := len(r.Undoable()); rest > 0 {
 			status += fmt.Sprintf(" (%d restorable)", rest)
 		}
-		fmt.Printf("%s  %s  %10s  %s\n", r.ID, r.Start.Local().Format("2006-01-02 15:04"), tui.HumanBytes(bytes), status)
+		lines = append(lines, fmt.Sprintf("%s  %s  %10s cleaned  %s", r.ID, r.Start.Local().Format("2006-01-02 15:04"), tui.HumanBytes(runBytes(r)), status))
 	}
-	return nil
+	return append(lines, historyNote...)
+}
+
+var historyNote = []string{
+	"Cleaned counts finished actions only: a prune at what it deleted, anything else at its planned size; a failed or cut-short action counts nothing.",
+	"A Trash move frees its space only once the Trash is emptied; a move to regrow staging (Finder unavailable) is not freed by that.",
 }
