@@ -125,7 +125,7 @@ func TestRunSummaryCountsAnExportedVolumeInStaging(t *testing.T) {
 			[]engine.Action{folderToTrash("/u/proj/cache", 2*gib)}, "0 B", "2.0 GiB", "", ""},
 		{"each figure counts its own actions", finderMover{},
 			[]engine.Action{steward(5 * gib), volumeRemoval("dune_db", 3*gib), folderToTrash("/u/proj/cache", 2*gib)}, "5.0 GiB", "2.0 GiB", "", "3.0 GiB"},
-		{"a move to staging and a volume export share a folder and stay two figures", stagingMover{},
+		{"a move to staging and a volume export stay two figures", stagingMover{},
 			[]engine.Action{folderToTrash("/u/proj/cache", 2*gib), volumeRemoval("dune_db", 3*gib)}, "0 B", "0 B", "2.0 GiB", "3.0 GiB"},
 		{"a volume whose removal failed is counted nowhere", finderMover{},
 			[]engine.Action{volumeRemoval("busy_db", 4*gib)}, "0 B", "0 B", "", ""},
