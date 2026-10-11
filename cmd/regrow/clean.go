@@ -202,7 +202,7 @@ func runSummary(res executor.Result, stagingDir string) []string {
 	}
 	if res.ExportedBytes > 0 {
 		lines = append(lines,
-			fmt.Sprintf("  Volume exports     %10s  removed docker volumes, kept as tarballs in %s; delete that folder to free the room; `regrow undo` does not restore them", tui.HumanBytes(res.ExportedBytes), stagingDir),
+			fmt.Sprintf("  Volume exports     %10s  removed docker volumes, kept as tarballs (docker-volume-*.tar) in %s; delete those files to free the room; `regrow undo` does not restore them", tui.HumanBytes(res.ExportedBytes), stagingDir),
 			"                                Docker hands the space it held for them back to the Mac only when it trims its disk image",
 		)
 	}
