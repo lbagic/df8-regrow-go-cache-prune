@@ -1,29 +1,24 @@
 # 4K aerial screensaver/wallpaper videos — full set ~64GB. Path moved
 # between Sequoia and Tahoe (docs/research/02 §10, §14): idleassetsd
 # system dir through macOS 15, wallpaper.agent container from 26.
+# A raw `find … -delete` as root has no Trash and no undo, which
+# invariants 2 and 4 keep regrow from running: surface-only, and the
+# row gives the command to run yourself.
 id: aerial-wallpapers
 title: Aerial wallpaper videos
 category: macos
-risk: safe
+risk: surface-only
 paths:
   darwin:
     - path: /Library/Application Support/com.apple.idleassetsd/Customer
       os_max: "25"
     - path: ~/Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches
       os_min: "26"
-native_command:
-  - find
-  - "{path}"
-  - -type
-  - f
-  - -name
-  - "*.mov"
-  - -delete
 note: The videos come back whenever System Settings ▸ Wallpaper is opened, even with a still wallpaper; `regrow doctor` prints how to stop the downloads.
 regen:
-  story: macOS downloads the aerial catalogue again when System Settings ▸ Wallpaper is opened, and any aerial selected as wallpaper or screensaver.
-  cost: roughly 0.5 GB of download per video
-sudo: true
+  story: 'macOS downloads the aerial catalogue again when System Settings ▸ Wallpaper is opened, and any aerial selected as wallpaper or screensaver. To remove the videos yourself: sudo find "/Library/Application Support/com.apple.idleassetsd/Customer" -type f -name ''*.mov'' -delete (macOS 15 and earlier), or sudo find ~/Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches -type f -name ''*.mov'' -delete (macOS 26 and later).'
+  cost: n/a — regrow never deletes here; roughly 0.5 GB of download per video macOS fetches again
+sudo: false
 # Seen on macOS 15.7, where idleassetsd is the downloader; the row
 # stays off the Tahoe path until the same is seen there.
 causes:
@@ -36,7 +31,7 @@ causes:
       - "A batch already running goes on, and the videos come back the next time the pane is opened. To stop the downloader itself:"
       - "sudo launchctl disable system/com.apple.idleassetsd   (untested: System Integrity Protection may refuse it)"
       - "sudo killall idleassetsd   (stops the batch that is running now)"
-      - "Then remove the videos: regrow clean aerial-wallpapers"
+      - "Then remove the videos: sudo find \"/Library/Application Support/com.apple.idleassetsd/Customer\" -type f -name '*.mov' -delete"
 fixture:
   files:
     - /Library/Application Support/com.apple.idleassetsd/Customer/4KSDR240FPS/a.mov

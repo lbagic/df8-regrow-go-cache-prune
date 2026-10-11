@@ -121,22 +121,38 @@ func TestOwnerConflicts(t *testing.T) {
 
 // The aerial row's fix is the owner's instructions for a download that
 // eats tens of GB: the lines that stop it must not drop out of the
-// catalog unnoticed.
+// catalog unnoticed. regrow never deletes the videos, so the row and
+// the fix give the command the owner runs instead.
 func TestAerialCauseFixText(t *testing.T) {
 	catalog, err := LoadEmbedded()
 	if err != nil {
 		t.Fatal(err)
 	}
+	var rule *Rule
 	var fix []string
-	for _, r := range catalog {
+	for i, r := range catalog {
+		if r.ID != "aerial-wallpapers" {
+			continue
+		}
+		rule = &catalog[i]
 		for _, c := range r.Causes {
-			if r.ID == "aerial-wallpapers" && c.Check == "aerial-downloads" {
+			if c.Check == "aerial-downloads" {
 				fix = c.Fix
 			}
 		}
 	}
-	if fix == nil {
+	if rule == nil || fix == nil {
 		t.Fatal("aerial-wallpapers declares no aerial-downloads cause")
+	}
+	const removeOld = `sudo find "/Library/Application Support/com.apple.idleassetsd/Customer" -type f -name '*.mov' -delete`
+	const removeNew = `sudo find ~/Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches -type f -name '*.mov' -delete`
+	if rule.Risk != RiskSurfaceOnly || len(rule.NativeCommand) != 0 || rule.Sudo {
+		t.Errorf("risk %q, command %q, sudo %v; want surface-only with nothing to run", rule.Risk, rule.NativeCommand, rule.Sudo)
+	}
+	for _, want := range []string{removeOld + " (macOS 15 and earlier)", removeNew + " (macOS 26 and later)"} {
+		if !strings.Contains(rule.Regen.Story, want) {
+			t.Errorf("the row's story does not name %q:\n%s", want, rule.Regen.Story)
+		}
 	}
 	line := func(parts ...string) bool {
 		return slices.ContainsFunc(fix, func(l string) bool {
@@ -154,11 +170,14 @@ func TestAerialCauseFixText(t *testing.T) {
 		// The disable is untested against SIP; the same line must say so.
 		{"sudo launchctl disable system/com.apple.idleassetsd", "untested", "System Integrity Protection"},
 		{"sudo killall idleassetsd"},
-		{"regrow clean aerial-wallpapers"},
+		{"Then remove the videos: " + removeOld},
 	} {
 		if !line(want...) {
 			t.Errorf("no fix line with %q in:\n%s", want, strings.Join(fix, "\n"))
 		}
+	}
+	if line("regrow clean") {
+		t.Errorf("a fix line sends the owner to regrow clean, which never deletes the videos:\n%s", strings.Join(fix, "\n"))
 	}
 }
 

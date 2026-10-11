@@ -114,3 +114,36 @@ func TestAerialDownloads(t *testing.T) {
 		})
 	}
 }
+
+// The videos are only shown: removing them is a raw delete as root,
+// which regrow never runs (invariants 2 and 4). On both of the rule's
+// paths a found video is never pre-selected, and naming the rule by id
+// plans nothing for it.
+func TestAerialWallpapersAreShownOnly(t *testing.T) {
+	rule := embeddedRule(t, "aerial-wallpapers")
+	for _, tc := range []struct {
+		version, video string
+	}{
+		{"15.5", "/Library/Application Support/com.apple.idleassetsd/Customer/4KSDR240FPS/a.mov"},
+		{"26.0", "~/Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches/a.mov"},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
+			host := fixtureHost(t, rule)
+			host.Version = tc.version
+			writeFile(t, host.ExpandPath(tc.video), 1<<20)
+			s := New(host)
+			s.Queries = nil
+			findings := s.Scan(context.Background(), []engine.Rule{rule})
+			if f := findings[0]; f.Err != "" || len(f.Items) == 0 {
+				t.Fatalf("finding %+v, want the video's folder found", f)
+			}
+			if sel := engine.DefaultSelection(findings); len(sel) != 0 {
+				t.Errorf("default selection %v, want nothing", sel)
+			}
+			plan := engine.BuildPlan(host, findings, map[string]bool{rule.ID: true})
+			if len(plan.Actions) != 0 || len(plan.Skipped) != 1 || plan.Skipped[0].Reason != "surface-only: report, never delete" {
+				t.Errorf("plan by id: actions %+v, skipped %+v; want no action and one surface-only skip", plan.Actions, plan.Skipped)
+			}
+		})
+	}
+}
