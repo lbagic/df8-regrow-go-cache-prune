@@ -242,7 +242,7 @@ const S = {
   tick: null,         // the shell's latest tick: the forecast in the headline
   env: '',            // why the login shell's environment could not be read
   down: '',           // the message of an engine that exited
-  cut: null,          // a run the engine exited under: {id, done, of}
+  cut: null,          // a run the engine exited under: {id, done, of, moves}
   error: null,        // an error event that no other state explains
   opened: false,      // the Full Disk Access settings were opened from here
   scan: null,         // see newScan
@@ -331,7 +331,7 @@ const on = {
     if (e.state === 'environment') S.env = e.captured === false ? e.reason || 'no reason given' : '';
     if (e.state === 'automation') S.automation = e.allowed ? 'allowed' : 'denied';
     if (e.state !== 'engine_down') return;
-    if (S.run && !S.run.result) S.cut = cutOf(S.plan, S.run.marks);
+    if (S.run && !S.run.result) S.cut = { id: S.plan.id, done: S.plan.actions.filter((a) => stateOf(a).state === 'done').length, of: S.plan.actions.length, moves: S.plan.actions.length > S.plan.commands };
     asked.clear();
     counting = clearTimeout(counting);
     S.down = e.message || 'no reason given';
@@ -400,18 +400,6 @@ function scan() {
 function review(note) {
   S.note = note;
   S.planning = ask('plan', 'review', { scan_id: S.scan.id, select: [...S.ticked] });
-}
-
-// What can be said of a run the engine stopped under. Only what was reported reached the page, and the engine
-// journals an action before it reports it, so the action after the last one reported may have begun.
-function cutOf(p, marks) {
-  const next = p.actions.find((a) => !marks[a.seq] || marks[a.seq].state === 'running');
-  return {
-    id: p.id, of: p.actions.length, all: !next,
-    done: p.actions.filter((a) => marks[a.seq] && marks[a.seq].state === 'done').length,
-    moved: p.actions.some((a) => a.kind === 'trash' && marks[a.seq] && marks[a.seq].state === 'done'),
-    loose: next && next.kind === 'trash' ? next : null,
-  };
 }
 
 function ended(result, canceled, error) {
@@ -539,8 +527,10 @@ const tilde = (s) => (home ? String(s).replace(home, '$1~') : String(s));
 
 // tui.ShellJoin
 const shellJoin = (argv) => [].concat(argv || []).map((a) => (/[ \t"'*?[]/.test(a) ? JSON.stringify(a) : a)).join(' ');
+// One word as a shell reads it back, quoted as the engine's shellQuote quotes it.
+const shellWord = (s) => (/[ \t\n'"\\$`*?[\](){}<>|&;!#]/.test(s) ? "'" + s.replace(/'/g, "'\\''") + "'" : s);
 // How regrow is started in Terminal, as the engine names itself: an app's engine goes by its path.
-const cli = () => shellJoin([(S.hello && S.hello.self) || 'regrow']);
+const cli = () => shellWord((S.hello && S.hello.self) || 'regrow');
 
 const titleOf = (id) => { const row = S.scan.rows.find((r) => r.id === id); return row ? row.rule.title : id; };
 
@@ -628,8 +618,10 @@ function notices(all) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow's engine answered with an error: <span class="err mono">${S.error.message || S.error.code}</span></span></div>`);
   }
   if (S.cut) {
+    // Only what was reported reached the page, and the engine journals an action before it reports it and
+    // skips moves it never journals, so the note says nothing it would have to guess from the marks.
     const c = S.cut;
-    rows.push(h`<div class="note">${ICON.caution}<span>${c.all ? h`The engine stopped before it sent the result; it had reported all ${num(c.of, 'action')} ended, ${c.done} done.` : h`The engine stopped during the run, after reporting ${c.done} of ${num(c.of, 'action')} done.`}${c.moved || c.loose ? h` What it moved comes back with <span class="mono">${cli()} undo ${c.id}</span>` : ''}${c.loose ? h`. If <span class="mono">${tilde(c.loose.path)}</span> is not among it, look in the Trash or in regrow staging: the engine may have been moving it as it stopped.` : ''}</span></div>`);
+    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped during the run, after reporting ${c.done} of ${num(c.of, 'action')} done.${c.moves ? h` If it moved anything, <span class="mono">${cli()} undo ${c.id}</span> puts it back; an item it was moving as it stopped may be in the Trash or in regrow staging with no record.` : ''}</span></div>`);
   }
   if (all && S.env) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow could not read your login shell's environment, so tools outside the system folders are not found: <span class="mono">${S.env}</span></span></div>`);

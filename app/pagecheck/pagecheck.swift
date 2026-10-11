@@ -97,6 +97,8 @@ struct Play {
     var execute = "execute"
     var executeStops = false             // half the journal arrives
     var executeLines: Int?               // only this many lines of the journal arrive
+    var commandsOnly = false             // plans keep only their commands, no Trash move
+    var helloSelf: String?               // the hello's self, in place of the recorded one
     var executeError: (code: String, message: String)?  // the answer to the next execute
     var clockStops = false               // the page's timers never fire
 }
@@ -419,6 +421,11 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
                 expect(hello.contains("\"fda\":\"granted\""), "the recorded hello has no fda to deny")
                 hello = hello.replacingOccurrences(of: "\"fda\":\"granted\"", with: "\"fda\":\"denied\"")
             }
+            if let path = play.helloSelf {
+                var event = parse(hello)
+                event["self"] = path
+                hello = json(event)
+            }
             send([hello])
             if let tick = play.tick { send([answering(tick, "shell-1")[0]]) }
             if let reason = play.environment { send(["event": "shell", "state": "environment", "captured": false, "reason": reason]) }
@@ -470,6 +477,12 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
         var lines = answering(section, id)
         lines[0] = lines[0].replacingOccurrences(of: "\"expires_at\":\"[^\"]*\"", with: "\"expires_at\":\"\(expires)\"", options: .regularExpression)
         if !lines[0].contains(expires) { fail("the recorded plan has no expires_at to set") }
+        if play.commandsOnly {
+            var event = parse(lines[0]), plan = event.obj("plan")
+            plan["actions"] = plan.objs("actions").filter { $0.str("kind") != "trash" }
+            event["plan"] = plan
+            lines[0] = json(event)
+        }
         if select != nil, play.holdPlan {
             play.holdPlan = false
             planHeld.append(lines)
@@ -1081,23 +1094,30 @@ struct Scenario {
             r.send(["event": "shell", "state": "engine_down", "message": "the engine exited with status 2"])
             await r.settle()
             r.same(await r.screen(), "down", "the screen")
-            r.has(await r.text(".note"), "The engine stopped during the run, after reporting \(done) of 25 actions done", "what the run had done")
+            r.has(await r.text(".note"), "The engine stopped during the run, after reporting \(done) of 25 actions done.", "what the run had done")
             r.same(await r.text(".note .mono"), "\(r.transcript.event("hello", "hello").str("self")) undo \(r.planID)", "the undo command")
-            r.has(await r.text(".note"), "is not among it, look in the Trash or in regrow staging", "the Trash move that was running")
+            r.has(await r.text(".note"), "an item it was moving as it stopped may be in the Trash or in regrow staging with no record", "the move that may have been in flight")
             await r.shoot()
             r.send([r.transcript.lines("hello")[0]])
             await r.settle()
             r.same(await r.screen(), "findings", "the screen after the engine came back")
             r.has(await r.text(".note"), "The engine stopped during the run, after reporting \(done) of 25 actions done", "what the run had done, after the next scan")
         },
-        Scenario(name: "engine-down-early", play: Play(executeLines: 1)) { r in
-            // The engine exits while the run's first action, a command, is running: no Trash move can have begun,
-            // so there is nothing for undo.
+        Scenario(name: "engine-down-commands", play: Play(executeLines: 1, commandsOnly: true)) { r in
+            // The engine exits under a plan of commands only: none has an undo, so the note offers none.
             await toRun(r)
+            let commands = r.transcript.event("plan-all", "plan").obj("plan").objs("actions").filter { $0.str("kind") != "trash" }.count
             r.send(["event": "shell", "state": "engine_down", "message": "the engine exited with status 2"])
             await r.settle()
-            r.has(await r.text(".note"), "The engine stopped during the run, after reporting 0 of 25 actions done.", "what the run had done")
-            r.same(await r.count(".note .mono"), 0, "commands in the note when nothing was moved")
+            r.same(await r.text(".note"), "The engine stopped during the run, after reporting 0 of \(commands) actions done.", "what the run had done")
+            r.same(await r.count(".note .mono"), 0, "commands in the note for a plan with no Trash move")
+            await r.shoot()
+        },
+        Scenario(name: "undo-quoted", play: Play(helloSelf: "/Users/dev/R&D Apps/Regrow.app/Contents/MacOS/regrow-engine")) { r in
+            // An app's engine at a path the shell would split or expand: the undo command quotes it as one word.
+            await toRun(r)
+            let run = r.transcript.event("execute", "done").obj("result").str("run_id")
+            r.same(await r.text(".undo .mono"), "'/Users/dev/R&D Apps/Regrow.app/Contents/MacOS/regrow-engine' undo \(run)", "the undo command")
             await r.shoot()
         },
         Scenario(name: "engine-down") { r in
