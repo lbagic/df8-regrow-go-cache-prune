@@ -1,0 +1,2 @@
+[trash] downloaded-installers: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Downloads/Docker.dmg") as alias)  (pre: downloaded-installer-recheck)
+[trash] downloaded-installers: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Downloads/Ollama-darwin.zip") as alias)  (pre: downloaded-installer-recheck)

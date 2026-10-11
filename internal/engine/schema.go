@@ -328,18 +328,26 @@ func (r Rule) PerItemActionable() bool {
 // and the only reference to a detached HEAD's commits, without asking.
 // PreActionBuildOutputRecheck judges a build folder again right before
 // it goes to the Trash and refuses when it is tracked, no longer
-// ignored, or its project is in use now.
+// ignored, or its project is in use now. PreActionNpxRecheck refuses
+// to move an npx folder a running process uses now.
+// PreActionDownloadedInstallerRecheck judges a download again right
+// before it goes to the Trash and refuses when it is kept now.
 // A hook failure leaves the target in place. The registry of hook names
 // lives here so a typo'd pre_action fails at load, like a typo'd
 // placeholder; the implementations are registered on the executor.
 const (
-	PreActionVolumeExport        = "docker-volume-export"
-	PreActionAgentScratchRecheck = "agent-scratch-recheck"
-	PreActionWorktreeRecheck     = "worktree-recheck"
-	PreActionBuildOutputRecheck  = "build-output-recheck"
+	PreActionVolumeExport               = "docker-volume-export"
+	PreActionAgentScratchRecheck        = "agent-scratch-recheck"
+	PreActionWorktreeRecheck            = "worktree-recheck"
+	PreActionBuildOutputRecheck         = "build-output-recheck"
+	PreActionNpxRecheck                 = "npx-recheck"
+	PreActionDownloadedInstallerRecheck = "downloaded-installer-recheck"
 )
 
-var knownPreActions = map[string]bool{PreActionVolumeExport: true, PreActionAgentScratchRecheck: true, PreActionWorktreeRecheck: true, PreActionBuildOutputRecheck: true}
+var knownPreActions = map[string]bool{
+	PreActionVolumeExport: true, PreActionAgentScratchRecheck: true, PreActionWorktreeRecheck: true, PreActionBuildOutputRecheck: true,
+	PreActionNpxRecheck: true, PreActionDownloadedInstallerRecheck: true,
+}
 
 // KnownPreActions lists every hook name a rule may declare, sorted. An
 // executor that will run arbitrary catalog plans registers them all.

@@ -161,3 +161,35 @@ func TestAerialCauseFixText(t *testing.T) {
 		}
 	}
 }
+
+// A surface-only row exists to tell the owner what to do: the rows for
+// space regrow cannot remove must keep naming the setting or command
+// that does, and every rule of the kind ships behind --beta-rules.
+func TestSurfaceRowsNameTheirFix(t *testing.T) {
+	catalog, err := LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]Rule{}
+	for _, r := range catalog {
+		byID[r.ID] = r
+	}
+	for id, wants := range map[string][]string{
+		"macos-update-download": {"Software Update", "softwareupdate --list", "Download new updates when available", "sudo defaults write /Library/Preferences/com.apple.SoftwareUpdate AutomaticDownload -bool false"},
+		"chrome-ai-model":       {"Settings ▸ AI Innovations", "On-device AI", "GenAILocalFoundationalModelSettings"},
+	} {
+		r, ok := byID[id]
+		if !ok {
+			t.Errorf("%s is missing from the catalog", id)
+			continue
+		}
+		if r.Risk != RiskSurfaceOnly || !r.Beta {
+			t.Errorf("%s: risk %q, beta %v; want a beta surface-only rule", id, r.Risk, r.Beta)
+		}
+		for _, w := range wants {
+			if !strings.Contains(r.Note, w) {
+				t.Errorf("%s: note %q does not name %q", id, r.Note, w)
+			}
+		}
+	}
+}

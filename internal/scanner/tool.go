@@ -19,8 +19,10 @@ func DefaultQueries() map[string]ToolQuery {
 	queries := map[string]ToolQuery{
 		"apfs-purgeable":             queryAPFSPurgeable,
 		"build-output":               queryBuildOutput,
+		"downloaded-installers":      queryDownloadedInstallers,
 		"git-worktrees":              queryGitWorktrees,
 		"hf-hub":                     queryHFHub,
+		"npx-cache":                  queryNpxCache,
 		"ollama-models":              queryOllamaModels,
 		"simctl-devices":             querySimctlDevices,
 		"simctl-devices-unavailable": querySimctlDevicesUnavailable,

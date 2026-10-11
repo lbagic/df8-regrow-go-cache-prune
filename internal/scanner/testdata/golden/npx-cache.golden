@@ -1,0 +1,2 @@
+[trash] npx-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.npm/_npx/aaaa1111bbbb2222") as alias)  (pre: npx-recheck)
+[trash] npx-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.npm/_npx/cccc3333dddd4444") as alias)  (pre: npx-recheck)

@@ -41,6 +41,10 @@ func ActionCommand(a engine.Action) string {
 		s += "  (worktree rechecked first)"
 	case engine.PreActionBuildOutputRecheck:
 		s += "  (project checked again first)"
+	case engine.PreActionNpxRecheck:
+		s += "  (running processes checked again first)"
+	case engine.PreActionDownloadedInstallerRecheck:
+		s += "  (download and app checked again first)"
 	default:
 		s += "  (pre: " + a.PreAction + ")"
 	}

@@ -1,0 +1,27 @@
+# npx's package folders, one per package spec it ran, at
+# ~/.npm/_npx/<hash>. `npm cache clean --force` leaves them (it deletes
+# ~/.npm/_cacache only), and nothing else removes one. The npx-cache
+# query (internal/scanner/tool_npx.go) lists each folder, named by the
+# packages in it, and keeps a folder a running process works in or
+# names on its command line, and one npx ran in the last 7 days: a
+# server npx started loads its modules as it needs them.
+id: npx-cache
+title: npx package folders
+category: dev-caches
+risk: safe
+tool_query: npx-cache
+# Running processes are checked again right before each Trash move.
+pre_action: npx-recheck
+regen:
+  story: npx installs a package again the next time it runs it.
+  cost: next npx run re-downloads; network
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: create-vite@latest · npx aaaa1111bbbb2222
+      path: ~/.npm/_npx/aaaa1111bbbb2222
+      bytes: 30000000
+    - label: npx cccc3333dddd4444
+      path: ~/.npm/_npx/cccc3333dddd4444
+      bytes: 4000000

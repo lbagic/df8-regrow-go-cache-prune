@@ -140,6 +140,12 @@ func newRunExecutor(host engine.Host, runID string, stream func(context.Context,
 			engine.PreActionBuildOutputRecheck: func(ctx context.Context, a engine.Action) (*trash.Receipt, error) {
 				return nil, scanner.RecheckBuildOutput(ctx, a.Path)
 			},
+			engine.PreActionNpxRecheck: func(ctx context.Context, a engine.Action) (*trash.Receipt, error) {
+				return nil, scanner.RecheckNpxEntry(ctx, a.Path)
+			},
+			engine.PreActionDownloadedInstallerRecheck: func(ctx context.Context, a engine.Action) (*trash.Receipt, error) {
+				return nil, scanner.RecheckDownloadedInstaller(ctx, a.Path)
+			},
 		},
 		RunID: runID,
 	}
