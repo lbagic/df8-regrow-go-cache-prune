@@ -1,0 +1,24 @@
+# Simulator runtimes left on disk after Xcode went: 5–10 GB each, in
+# root-owned folders that simdiskimaged manages. With Xcode gone `xcrun`
+# finds no simctl, so sim-runtimes lists nothing; the
+# sim-runtimes-no-xcode query (internal/scanner/tool_simruntime.go)
+# then lists them through the simctl CoreSimulator keeps outside Xcode.
+# While xcrun finds simctl, or an Xcode app is installed, it lists
+# nothing, so the two rules never list the same runtime. Surface-only:
+# the note says how to delete one.
+id: sim-runtimes-no-xcode
+title: Simulator runtimes (no Xcode)
+category: xcode
+risk: surface-only
+tool_query: sim-runtimes-no-xcode
+note: "Regrow does not delete these. With the simctl Xcode left behind, /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/simctl runtime list names each runtime's identifier, and the same simctl's runtime delete <identifier> --dry-run shows what would go; without --dry-run it is meant to delete it, which is untested without Xcode. Simulators of a deleted runtime stop booting until it is downloaded again."
+regen:
+  story: Xcode downloads a runtime again when a simulator needs it (Settings ▸ Components).
+  cost: n/a — regrow never deletes these; a 5–10 GB download per runtime if one is needed again
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: iOS 18.3 (22D8075)
+      arg: 11111111-2222
+      bytes: 8700000000

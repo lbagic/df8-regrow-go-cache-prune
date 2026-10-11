@@ -32,6 +32,11 @@ func DefaultQueries() map[string]ToolQuery {
 	sessions := &agentSessions{}
 	queries["agent-scratch"] = sessions.Ended
 	queries["agent-scratch-kept"] = sessions.Kept
+	android := &androidSDK{}
+	queries["android-ndk"] = android.NDKs
+	queries["android-sdk"] = android.SDK
+	queries["fnm-node-versions"] = (&fnmVersions{}).Unreferenced
+	queries["sim-runtimes-no-xcode"] = (&simRuntimesNoXcode{}).Runtimes
 	for name, q := range dockerQueries() {
 		queries[name] = q
 	}

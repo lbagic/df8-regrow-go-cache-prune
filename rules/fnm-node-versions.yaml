@@ -1,0 +1,36 @@
+# Node versions installed with fnm that nothing names. fnm keeps each
+# version whole in <fnm dir>/node-versions/<version>/, with the npm
+# packages installed globally into it (100–800 MB each here), and never
+# removes one by itself. The fnm-node-versions query
+# (internal/scanner/tool_fnm.go) keeps a version when an fnm alias
+# (the default included) points at it, a .nvmrc or .node-version under
+# the project roots or in the home folder resolves to it the way fnm
+# resolves one, a launchd plist in ~/Library/LaunchAgents,
+# /Library/LaunchAgents or /Library/LaunchDaemons names a path into it
+# or runs fnm with it, or a running process executes or maps a file from
+# it. A source that cannot be read or parsed offers nothing, and so does
+# a run under sudo. nvm is not covered.
+id: fnm-node-versions
+title: Node versions nothing references (fnm)
+category: toolchains
+risk: caution
+tool_query: fnm-node-versions
+native_command: fnm uninstall {arg}
+# The four sources are read again right before each uninstall.
+pre_action: fnm-version-recheck
+note: A project that pins this version only in package.json engines or sits outside the project roots, a shell where you ran `fnm use` with it, and a cron job are not checked; each asks for `fnm install` again.
+regen:
+  story: fnm install <version> downloads and installs it again; npm packages installed globally into it need installing again too.
+  cost: a download of about 30–50 MB per version, plus its global packages; needs the network
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: Node v16.20.2
+      arg: v16.20.2
+      path: ~/Library/Application Support/fnm/node-versions/v16.20.2
+      bytes: 90000000
+    - label: Node v18.17.1
+      arg: v18.17.1
+      path: ~/Library/Application Support/fnm/node-versions/v18.17.1
+      bytes: 120000000

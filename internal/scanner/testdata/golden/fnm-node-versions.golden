@@ -1,0 +1,2 @@
+[native] fnm-node-versions: fnm uninstall v16.20.2  (pre: fnm-version-recheck)
+[native] fnm-node-versions: fnm uninstall v18.17.1  (pre: fnm-version-recheck)

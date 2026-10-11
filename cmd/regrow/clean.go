@@ -151,6 +151,9 @@ func newRunExecutor(host engine.Host, runID string, stream func(context.Context,
 			engine.PreActionDownloadedInstallerRecheck: func(ctx context.Context, a engine.Action) (*trash.Receipt, error) {
 				return nil, scanner.RecheckDownloadedInstaller(ctx, a.Path)
 			},
+			engine.PreActionFnmVersionRecheck: func(ctx context.Context, a engine.Action) (*trash.Receipt, error) {
+				return nil, scanner.RecheckFnmVersion(ctx, a.Path)
+			},
 		},
 		RunID: runID,
 	}

@@ -45,6 +45,8 @@ func ActionCommand(a engine.Action) string {
 		s += "  (running processes checked again first)"
 	case engine.PreActionDownloadedInstallerRecheck:
 		s += "  (download and app checked again first)"
+	case engine.PreActionFnmVersionRecheck:
+		s += "  (version checked unreferenced again first)"
 	default:
 		s += "  (pre: " + a.PreAction + ")"
 	}

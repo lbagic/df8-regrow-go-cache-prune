@@ -1,0 +1,2 @@
+[trash] android-ndk: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Android/sdk/ndk/26.1.10909125") as alias)
+[trash] android-ndk: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Android/sdk/ndk/27.0.12077973") as alias)

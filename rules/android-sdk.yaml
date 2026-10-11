@@ -1,0 +1,22 @@
+# An Android SDK that Android Studio left behind: ~/Library/Android/sdk
+# (platforms, build-tools, system images, emulator, NDKs), offered as one
+# folder while no Android Studio is installed (the android-ndk rule's
+# check). The NDKs inside are android-ndk's rows; the ledger counts
+# their bytes there and this row's share is the rest. An SDK anywhere
+# else was put there by hand and is never offered.
+id: android-sdk
+title: Android SDK (no Android Studio)
+category: toolchains
+risk: caution
+tool_query: android-sdk
+note: Command-line Android builds (Gradle, React Native, Flutter) use the SDK without Studio, and emulators need its system images; the row says when ANDROID_HOME points here. Undo restores it from the Trash.
+regen:
+  story: Installing Android Studio, or sdkmanager from the command-line tools, downloads the SDK packages a build needs again.
+  cost: several GB of downloads; needs the network
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: Android SDK — ANDROID_HOME points here
+      path: ~/Library/Android/sdk
+      bytes: 11000000000

@@ -1,0 +1,1 @@
+[trash] android-sdk: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Android/sdk") as alias)
