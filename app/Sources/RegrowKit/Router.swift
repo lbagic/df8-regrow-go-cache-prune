@@ -216,7 +216,7 @@ public struct Router {
         } else {
             done["result"] = [
                 "run_id": dropped.planID ?? "", "done": 0, "failed": 0, "bytes": 0,
-                "trash_bytes": 0, "staged_bytes": 0, "pruned": ["files": 0, "bytes": 0],
+                "trash_bytes": 0, "staged_bytes": 0, "exported_bytes": 0, "pruned": ["files": 0, "bytes": 0],
                 "stopped": true,
             ]
         }

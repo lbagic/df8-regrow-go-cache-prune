@@ -73,8 +73,13 @@ type Result struct {
 	// StagedBytes is the part of Bytes renamed into regrow's staging
 	// dir because Finder was unavailable: emptying the Trash never
 	// frees it.
-	StagedBytes int64    `json:"staged_bytes"`
-	Failures    []string `json:"failures,omitempty"`
+	StagedBytes int64 `json:"staged_bytes"`
+	// ExportedBytes is the part of Bytes that is a docker volume removed
+	// after its export: the tarball stays in regrow's staging dir, about
+	// as large as the volume was, until it is deleted. Whether the
+	// Mac gets the space Docker held back, and when, is Docker's to say.
+	ExportedBytes int64    `json:"exported_bytes"`
+	Failures      []string `json:"failures,omitempty"`
 	// Skipped lists actions never attempted, with why. They are not
 	// journaled: nothing ran.
 	Skipped []string `json:"skipped,omitempty"`
@@ -178,12 +183,14 @@ func (e *Executor) Execute(ctx context.Context, plan engine.Plan) (Result, error
 		} else {
 			res.Done++
 			res.Bytes += freed
-			if a.Kind == engine.ActionTrash && receipt != nil {
-				switch receipt.Method {
-				case trash.MethodFinder:
+			if receipt != nil {
+				switch {
+				case a.Kind == engine.ActionTrash && receipt.Method == trash.MethodFinder:
 					res.TrashBytes += a.Bytes
-				case trash.MethodStaging:
+				case a.Kind == engine.ActionTrash && receipt.Method == trash.MethodStaging:
 					res.StagedBytes += a.Bytes
+				case a.Kind == engine.ActionNative && receipt.Method == trash.MethodExport:
+					res.ExportedBytes += a.Bytes
 				}
 			}
 		}

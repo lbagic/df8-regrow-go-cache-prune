@@ -184,6 +184,37 @@ func TestExecutePreActionRunsBeforeCommand(t *testing.T) {
 	}
 }
 
+func TestExecuteCountsARemovedVolumeAsExported(t *testing.T) {
+	e := &Executor{Log: &memLog{}, Now: fixedNow, Trash: &fakeMover{},
+		PreActions: map[string]PreAction{
+			engine.PreActionVolumeExport: func(_ context.Context, a engine.Action) (*trash.Receipt, error) {
+				return &trash.Receipt{Original: "docker volume " + a.ItemKey, To: "/staging/" + a.ItemKey + ".tar", Method: trash.MethodExport}, nil
+			},
+		},
+		RunNative: func(_ context.Context, argv []string) error {
+			if argv[len(argv)-1] == "kept_db" {
+				return errors.New("volume is in use")
+			}
+			return nil
+		}}
+	volume := func(name string, bytes int64) engine.Action {
+		return engine.Action{RuleID: "docker-volumes-named", ItemKey: name, Kind: engine.ActionNative,
+			Command: []string{"docker", "volume", "rm", name}, Bytes: bytes, PreAction: engine.PreActionVolumeExport}
+	}
+	plan := engine.Plan{Actions: []engine.Action{
+		volume("dune_db", 300), volume("kept_db", 70),
+		{RuleID: "go-build-cache", Kind: engine.ActionNative, Command: []string{"go", "clean", "-cache"}, Bytes: 50},
+		{RuleID: "npm-cache", Kind: engine.ActionTrash, Path: "/u/.npm", Bytes: 20, Command: trash.PreviewCommand("/u/.npm")},
+	}}
+	res, err := e.Execute(context.Background(), plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Done != 3 || res.Failed != 1 || res.Bytes != 370 || res.ExportedBytes != 300 || res.StagedBytes != 20 || res.TrashBytes != 0 {
+		t.Fatalf("result = %+v, want 370 bytes done, of them 300 an exported volume and 20 staged; the volume whose removal failed counts nowhere", res)
+	}
+}
+
 func TestExecutePreActionFailureBlocksCommand(t *testing.T) {
 	log := &memLog{}
 	nativeRan := false
