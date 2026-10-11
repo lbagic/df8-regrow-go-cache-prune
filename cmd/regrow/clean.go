@@ -307,6 +307,6 @@ func historyLines(runs []oplog.Run) []string {
 }
 
 var historyNote = []string{
-	"Cleaned is what finished actions covered: a Trash move counts in full (its space frees once the Trash is",
-	"emptied), a prune counts what it deleted, and a failed or cut-short action counts nothing.",
+	"Cleaned counts finished actions only: a prune at what it deleted, anything else at its planned size; a failed or cut-short action counts nothing.",
+	"A Trash move frees its space only once the Trash is emptied; a move to regrow staging (Finder unavailable) is not freed by that.",
 }

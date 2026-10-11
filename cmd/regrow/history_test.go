@@ -88,7 +88,7 @@ func TestHistoryLinesSayWhatTheSizeCounts(t *testing.T) {
 	if !strings.Contains(lines[0], "3.0 GiB cleaned") || strings.Contains(lines[0], "8.0 GiB") {
 		t.Errorf("a run's size must be labelled and count only the done action, got %q", lines[0])
 	}
-	for _, want := range []string{"Trash", "failed", "cut-short"} {
+	for _, want := range []string{"Trash", "staging", "failed", "cut-short"} {
 		if note := strings.Join(lines[1:], " "); !strings.Contains(note, want) {
 			t.Errorf("the note must say what the size counts (%q missing), got %q", want, note)
 		}
