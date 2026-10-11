@@ -621,7 +621,7 @@ function notices(all) {
     // Only what was reported reached the page, and the engine journals an action before it reports it and
     // skips moves it never journals, so the note says nothing it would have to guess from the marks.
     const c = S.cut;
-    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped during the run, after reporting ${c.done} of ${num(c.of, 'action')} done.${c.moves ? h` If it moved anything, <span class="mono">${cli()} undo ${c.id}</span> puts it back; an item it was moving as it stopped may be in the Trash or in regrow staging with no record.` : ''}</span></div>`);
+    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped during the run, after reporting ${c.done} of ${num(c.of, 'action')} done.${c.moves ? h` If it moved anything, <span class="mono">${cli()} undo ${c.id}</span> puts it back; an item it was moving as it stopped may be in the Trash or in regrow staging, and undo does not know of it.` : ''}</span></div>`);
   }
   if (all && S.env) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow could not read your login shell's environment, so tools outside the system folders are not found: <span class="mono">${S.env}</span></span></div>`);

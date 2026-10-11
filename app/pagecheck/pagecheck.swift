@@ -591,6 +591,18 @@ struct Scenario {
     await r.click("#go")
 }
 
+/// The engine exits after the page was sent the first `lines` journal lines of `section`, a run of the plan of
+/// everything: the note counts the done lines it was sent, offers undo, and names no item.
+@MainActor func stoppedNote(_ r: Run, _ section: String, _ lines: Int) async {
+    await toRun(r)
+    let done = r.transcript.lines(section).prefix(lines).map(parse).filter { $0.str("event") == "journal" && $0.obj("entry").str("event") == "done" }.count
+    r.send(["event": "shell", "state": "engine_down", "message": "the engine exited with status 2"])
+    await r.settle()
+    let me = r.transcript.event("hello", "hello").str("self")
+    r.same(await r.text(".note"), "The engine stopped during the run, after reporting \(done) of 25 actions done. If it moved anything, \(me) undo \(r.planID) puts it back; an item it was moving as it stopped may be in the Trash or in regrow staging, and undo does not know of it.", "the note")
+    await r.shoot()
+}
+
 /// The page's rows and tick boxes against the scan's findings, with "Safe to clear" opened so each is a row.
 @MainActor func checkRows(_ r: Run, _ scan: String) async {
     let t = r.transcript
@@ -1096,7 +1108,7 @@ struct Scenario {
             r.same(await r.screen(), "down", "the screen")
             r.has(await r.text(".note"), "The engine stopped during the run, after reporting \(done) of 25 actions done.", "what the run had done")
             r.same(await r.text(".note .mono"), "\(r.transcript.event("hello", "hello").str("self")) undo \(r.planID)", "the undo command")
-            r.has(await r.text(".note"), "an item it was moving as it stopped may be in the Trash or in regrow staging with no record", "the move that may have been in flight")
+            r.has(await r.text(".note"), "an item it was moving as it stopped may be in the Trash or in regrow staging, and undo does not know of it", "the move that may have been in flight")
             await r.shoot()
             r.send([r.transcript.lines("hello")[0]])
             await r.settle()
@@ -1113,11 +1125,28 @@ struct Scenario {
             r.same(await r.count(".note .mono"), 0, "commands in the note for a plan with no Trash move")
             await r.shoot()
         },
-        Scenario(name: "undo-quoted", play: Play(helloSelf: "/Users/dev/R&D Apps/Regrow.app/Contents/MacOS/regrow-engine")) { r in
-            // An app's engine at a path the shell would split or expand: the undo command quotes it as one word.
+        Scenario(name: "engine-down-first-command", play: Play(executeLines: 1)) { r in
+            // Only the first action's start, a command, was reported: nothing is done, and the plan still moves.
+            await stoppedNote(r, "execute", 1)
+        },
+        Scenario(name: "engine-down-skipped-moves", play: Play(execute: "execute-trash-failed", executeLines: 13)) { r in
+            // Emptying the Trash failed, so the engine skipped the moves after it without journaling them, then
+            // stopped during a later command: the first unmarked action is a move that never ran.
+            await stoppedNote(r, "execute-trash-failed", 13)
+        },
+        Scenario(name: "undo-quoted", play: Play(helloSelf: "/Users/dev/R&D/Regrow.app/Contents/MacOS/regrow-engine")) { r in
+            // An app's engine at a path the shell would cut short with no space in it: the undo command quotes it.
             await toRun(r)
             let run = r.transcript.event("execute", "done").obj("result").str("run_id")
-            r.same(await r.text(".undo .mono"), "'/Users/dev/R&D Apps/Regrow.app/Contents/MacOS/regrow-engine' undo \(run)", "the undo command")
+            r.same(await r.text(".undo .mono"), "'/Users/dev/R&D/Regrow.app/Contents/MacOS/regrow-engine' undo \(run)", "the undo command")
+            await r.shoot()
+        },
+        Scenario(name: "undo-quoted-note", play: Play(executeLines: 25, helloSelf: "/Users/dev/Team's R&D/Regrow.app/Contents/MacOS/regrow-engine")) { r in
+            // The stopped-run notice quotes the same way, a single quote included.
+            await toRun(r)
+            r.send(["event": "shell", "state": "engine_down", "message": "the engine exited with status 2"])
+            await r.settle()
+            r.same(await r.text(".note .mono"), "'/Users/dev/Team'\\''s R&D/Regrow.app/Contents/MacOS/regrow-engine' undo \(r.planID)", "the undo command in the notice")
             await r.shoot()
         },
         Scenario(name: "engine-down") { r in
