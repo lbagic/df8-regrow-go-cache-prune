@@ -173,8 +173,10 @@ A tick that sampled sends its `tick` event even when it then fails, so the alert
 ## hello
 
 ```json
-{"event":"hello","protocol":1,"version":"0.0.0-dev","fda":"denied"}
+{"event":"hello","protocol":1,"version":"0.0.0-dev","fda":"denied","self":"/Users/dev/Applications/Regrow.app/Contents/MacOS/regrow-engine"}
 ```
+
+`self` is how the owner starts this binary in Terminal, as the sudo skip names it: `regrow` when that name on PATH is this very file, else the executable's path, as inside an app bundle. A face that shows a command to type, such as `undo`, starts it with `self`. It is left out when the engine was given none.
 
 `fda` says whether this process has Full Disk Access: `granted`, `denied`, or `unknown`. The engine reads one entry of `~/.Trash`, or of `~/Library/Safari` when there is no Trash, and gives up after 2 s (`unknown`). It never probes another app's container, where an open can block forever. A grant takes effect when the app relaunches.
 

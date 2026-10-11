@@ -29,6 +29,7 @@ type event struct {
 	Protocol  int              `json:"protocol"`
 	Version   string           `json:"version"`
 	FDA       FDA              `json:"fda"`
+	Self      string           `json:"self"`
 	ScanID    string           `json:"scan_id"`
 	Rules     int              `json:"rules"`
 	Index     int              `json:"index"`

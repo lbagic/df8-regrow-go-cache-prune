@@ -331,7 +331,7 @@ const on = {
     if (e.state === 'environment') S.env = e.captured === false ? e.reason || 'no reason given' : '';
     if (e.state === 'automation') S.automation = e.allowed ? 'allowed' : 'denied';
     if (e.state !== 'engine_down') return;
-    if (S.run && !S.run.result) S.cut = { id: S.plan.id, done: S.plan.actions.filter((a) => stateOf(a).state === 'done').length, of: S.plan.actions.length, moves: S.plan.actions.length > S.plan.commands };
+    if (S.run && !S.run.result) S.cut = cutOf(S.plan, S.run.marks);
     asked.clear();
     counting = clearTimeout(counting);
     S.down = e.message || 'no reason given';
@@ -400,6 +400,18 @@ function scan() {
 function review(note) {
   S.note = note;
   S.planning = ask('plan', 'review', { scan_id: S.scan.id, select: [...S.ticked] });
+}
+
+// What can be said of a run the engine stopped under. Only what was reported reached the page, and the engine
+// journals an action before it reports it, so the action after the last one reported may have begun.
+function cutOf(p, marks) {
+  const next = p.actions.find((a) => !marks[a.seq] || marks[a.seq].state === 'running');
+  return {
+    id: p.id, of: p.actions.length, all: !next,
+    done: p.actions.filter((a) => marks[a.seq] && marks[a.seq].state === 'done').length,
+    moved: p.actions.some((a) => a.kind === 'trash' && marks[a.seq] && marks[a.seq].state === 'done'),
+    loose: next && next.kind === 'trash' ? next : null,
+  };
 }
 
 function ended(result, canceled, error) {
@@ -527,6 +539,8 @@ const tilde = (s) => (home ? String(s).replace(home, '$1~') : String(s));
 
 // tui.ShellJoin
 const shellJoin = (argv) => [].concat(argv || []).map((a) => (/[ \t"'*?[]/.test(a) ? JSON.stringify(a) : a)).join(' ');
+// How regrow is started in Terminal, as the engine names itself: an app's engine goes by its path.
+const cli = () => shellJoin([(S.hello && S.hello.self) || 'regrow']);
 
 const titleOf = (id) => { const row = S.scan.rows.find((r) => r.id === id); return row ? row.rule.title : id; };
 
@@ -614,8 +628,8 @@ function notices(all) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow's engine answered with an error: <span class="err mono">${S.error.message || S.error.code}</span></span></div>`);
   }
   if (S.cut) {
-    // Only what reached the page is counted: the engine journals an action before it reports it.
-    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped before the plan's end, after reporting ${S.cut.done} of ${num(S.cut.of, 'action')} done.${S.cut.moves ? h` What it moved comes back with <span class="mono">regrow undo ${S.cut.id}</span>` : ''}</span></div>`);
+    const c = S.cut;
+    rows.push(h`<div class="note">${ICON.caution}<span>${c.all ? h`The engine stopped before it sent the result; it had reported all ${num(c.of, 'action')} ended, ${c.done} done.` : h`The engine stopped during the run, after reporting ${c.done} of ${num(c.of, 'action')} done.`}${c.moved || c.loose ? h` What it moved comes back with <span class="mono">${cli()} undo ${c.id}</span>` : ''}${c.loose ? h`. If <span class="mono">${tilde(c.loose.path)}</span> is not among it, look in the Trash or in regrow staging: the engine may have been moving it as it stopped.` : ''}</span></div>`);
   }
   if (all && S.env) {
     rows.push(h`<div class="note">${ICON.caution}<span>regrow could not read your login shell's environment, so tools outside the system folders are not found: <span class="mono">${S.env}</span></span></div>`);
@@ -791,7 +805,7 @@ function drawResult() {
   return h`<section class="lead"><h2>${run.canceled ? 'Stopped' : 'The run has ended'}: ${r.done || 0} of ${num(p.actions.length, 'action')} done${r.failed ? `, ${r.failed} failed` : ''}${skipped ? `, ${skipped} skipped` : ''}.</h2>
       ${run.error ? h`<p class="err mono">${run.error}</p>` : ''}
       <p class="say">${freed ? h`<i class="sw frees_now"></i><b>${human(freed)}</b> is free now. ` : ''}${trash ? h`<i class="sw after_trash"></i><b>${human(trash)}</b> is in the Trash, and is free once you empty it. ` : ''}${staged ? h`<b>${human(staged)}</b> is in regrow staging, because Finder could not take it: emptying the Trash does not free that.` : ''}${freed || trash || staged ? '' : 'No space was freed.'}</p>
-      ${moved ? h`<p class="undo">To put back what went to the Trash${staged ? ' and to staging' : ''}:<span class="mono">regrow undo ${r.run_id || p.id}</span></p>` : ''}</section>
+      ${moved ? h`<p class="undo">To put back what went to the Trash${staged ? ' and to staging' : ''}:<span class="mono">${cli()} undo ${r.run_id || p.id}</span></p>` : ''}</section>
     ${notices(false)}
     ${failed.length ? section('Failed', `${num(failed.length, 'action')} ended with an error`, '',
       failed.map(([a, s]) => h`<div class="act skip">${ICON.fail}<div><h4>${titleOf(a.rule_id)}</h4><span class="ln mono">${told(a)}</span><p class="err mono">${s.error}</p></div></div>`), true) : ''}

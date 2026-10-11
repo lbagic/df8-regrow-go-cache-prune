@@ -96,6 +96,7 @@ struct Play {
     var automation: Bool? = true         // nil: the answer is withheld
     var execute = "execute"
     var executeStops = false             // half the journal arrives
+    var executeLines: Int?               // only this many lines of the journal arrive
     var executeError: (code: String, message: String)?  // the answer to the next execute
     var clockStops = false               // the page's timers never fire
 }
@@ -495,7 +496,7 @@ final class Run: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHa
             return send(["event": "error", "re": id, "code": error.code, "message": error.message])
         }
         let lines = answering(play.execute, id)
-        send(play.executeStops ? Array(lines.prefix(lines.count / 2)) : lines)
+        send(play.executeStops ? Array(lines.prefix(lines.count / 2)) : play.executeLines.map { Array(lines.prefix($0)) } ?? lines)
     }
 
     private func answer(cancel id: String, _ body: [String: Any]) {
@@ -928,7 +929,7 @@ struct Scenario {
             r.has(say, human(result.int("trash_bytes")) + " is in the Trash", "the figures")
             r.has(say, human(result.int("staged_bytes")) + " is in regrow staging", "the figures")
             r.has(say, "emptying the Trash does not free", "what staging means")
-            r.same(await r.text(".undo .mono"), "regrow undo \(result.str("run_id"))", "the undo line")
+            r.same(await r.text(".undo .mono"), "\(r.transcript.event("hello", "hello").str("self")) undo \(result.str("run_id"))", "the undo line: the engine's own command")
             r.expect(await r.flag("return getComputedStyle(document.querySelector('.undo .mono')).webkitUserSelect === 'text'"), "the undo command cannot be selected")
             r.same(await r.texts(".sec.bad .err"), journal.filter { $0.str("event") == "fail" }.map { $0.str("error").replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression) }, "what failed")
             r.same(await r.count(".ln[data-state=done]"), journal.filter { $0.str("event") == "done" }.count, "lines marked done")
@@ -1080,13 +1081,24 @@ struct Scenario {
             r.send(["event": "shell", "state": "engine_down", "message": "the engine exited with status 2"])
             await r.settle()
             r.same(await r.screen(), "down", "the screen")
-            r.has(await r.text(".note"), "after reporting \(done) of 25 actions done", "what the run had done")
-            r.has(await r.text(".note .mono"), "regrow undo \(r.planID)", "the undo command")
+            r.has(await r.text(".note"), "The engine stopped during the run, after reporting \(done) of 25 actions done", "what the run had done")
+            r.same(await r.text(".note .mono"), "\(r.transcript.event("hello", "hello").str("self")) undo \(r.planID)", "the undo command")
+            r.has(await r.text(".note"), "is not among it, look in the Trash or in regrow staging", "the Trash move that was running")
             await r.shoot()
             r.send([r.transcript.lines("hello")[0]])
             await r.settle()
             r.same(await r.screen(), "findings", "the screen after the engine came back")
-            r.has(await r.text(".note"), "after reporting \(done) of 25 actions done", "what the run had done, after the next scan")
+            r.has(await r.text(".note"), "The engine stopped during the run, after reporting \(done) of 25 actions done", "what the run had done, after the next scan")
+        },
+        Scenario(name: "engine-down-early", play: Play(executeLines: 1)) { r in
+            // The engine exits while the run's first action, a command, is running: no Trash move can have begun,
+            // so there is nothing for undo.
+            await toRun(r)
+            r.send(["event": "shell", "state": "engine_down", "message": "the engine exited with status 2"])
+            await r.settle()
+            r.has(await r.text(".note"), "The engine stopped during the run, after reporting 0 of 25 actions done.", "what the run had done")
+            r.same(await r.count(".note .mono"), 0, "commands in the note when nothing was moved")
+            await r.shoot()
         },
         Scenario(name: "engine-down") { r in
             await results(r)

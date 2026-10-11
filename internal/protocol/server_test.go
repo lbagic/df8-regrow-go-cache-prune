@@ -346,7 +346,9 @@ func TestPlanSkipsNameThisEngineAndMissingPrograms(t *testing.T) {
 		return "/fixture/bin/" + file, nil
 	}
 	p := start(t, srv)
-	p.expect("hello")
+	if hello := p.expect("hello")[0]; hello.Self != srv.Self {
+		t.Errorf("hello = %s, want self %q: the command a face tells the owner to type", hello.raw, srv.Self)
+	}
 
 	e := p.planned("p", p.scanned("s", 5), "")
 	if got := actionRules(e.Plan); got != "fixture-cache,fixture-here" {

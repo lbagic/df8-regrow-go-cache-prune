@@ -81,7 +81,7 @@ type Server struct {
 	// name them.
 	CleanFlags []string
 	// Self is how the owner starts this engine's binary in Terminal;
-	// sudo skips name it. Empty means `regrow`.
+	// sudo skips and hello name it. Empty means `regrow`.
 	Self string
 	// LookPath finds a steward command's program, in the shape of
 	// exec.LookPath: a plan skips an action whose program it does not
@@ -157,7 +157,7 @@ func (srv *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error
 	if probe == nil {
 		probe = func() FDA { return ProbeFDA(srv.Host) }
 	}
-	s.emit(helloEvent{head{Event: "hello"}, Version, srv.Version, probe()})
+	s.emit(helloEvent{head{Event: "hello"}, Version, srv.Version, probe(), srv.Self})
 
 	lines := make(chan requestLine)
 	quit := make(chan struct{})

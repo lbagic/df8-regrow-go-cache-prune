@@ -67,6 +67,7 @@ type helloEvent struct {
 	Protocol int    `json:"protocol"`
 	Version  string `json:"version"`
 	FDA      FDA    `json:"fda"`
+	Self     string `json:"self,omitempty"`
 }
 
 // inlineEvent puts the fields of body, a JSON object, on the event

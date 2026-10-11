@@ -1,5 +1,5 @@
 {"section":"hello"}
-{"event":"hello","protocol":1,"version":"0.5.0","fda":"granted"}
+{"event":"hello","protocol":1,"version":"0.5.0","fda":"granted","self":"/Users/dev/Applications/Regrow.app/Contents/MacOS/regrow-engine"}
 {"section":"scan"}
 {"event":"headroom","re":"REQ","at":"2026-10-09T09:12:00Z","total":994714423296,"free":26091925504,"purgeable":22978072576,"swap_used":3489660928}
 {"event":"start","re":"REQ","scan_id":"3fa9c1d2-1","rules":17}
