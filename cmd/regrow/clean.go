@@ -85,7 +85,12 @@ func printPlanActions(plan engine.Plan) {
 // executor. Both confirmation paths (clean prompt, TUI plan → x → y)
 // land here.
 func executePlan(host engine.Host, plan engine.Plan) error {
-	exec, release, err := newRunExecutor(host, executor.NewRunID(time.Now()), nil)
+	logPath, err := oplog.DefaultPath()
+	if err != nil {
+		return err
+	}
+	runID := executor.NewRunID(time.Now())
+	exec, release, err := newRunExecutor(host, runID, nil)
 	if err != nil {
 		return err
 	}
@@ -96,7 +101,7 @@ func executePlan(host engine.Host, plan engine.Plan) error {
 	}
 
 	fmt.Println()
-	for _, line := range runSummary(res) {
+	for _, line := range runSummary(res, runStagingDir(logPath, runID)) {
 		fmt.Println(line)
 	}
 	return nil
@@ -125,7 +130,7 @@ func newRunExecutor(host engine.Host, runID string, stream func(context.Context,
 	if err != nil {
 		return nil, nil, err
 	}
-	stagingDir := filepath.Join(stagingRoot(logPath), runID)
+	stagingDir := runStagingDir(logPath, runID)
 	exec := &executor.Executor{
 		Trash: &trash.Mover{Home: host.Home, StagingDir: stagingDir},
 		Log:   log,
@@ -160,6 +165,11 @@ func stagingRoot(logPath string) string {
 	return filepath.Join(filepath.Dir(logPath), "staging")
 }
 
+// runStagingDir is where one run's staged moves and volume exports go.
+func runStagingDir(logPath, runID string) string {
+	return filepath.Join(stagingRoot(logPath), runID)
+}
+
 // nothingToClean explains an empty plan: refusals and skips are why a
 // named rule did nothing, so they are never hidden.
 func nothingToClean(plan engine.Plan) []string {
@@ -177,17 +187,24 @@ func nothingToClean(plan engine.Plan) []string {
 	return lines
 }
 
-// runSummary reports an executed run by where the space went: freed,
-// in the Trash, or in regrow staging (Finder unavailable), which
-// emptying the Trash never frees.
-func runSummary(res executor.Result) []string {
+// runSummary reports an executed run by where the space went: freed, in
+// the Trash, in regrow staging (Finder unavailable), which emptying the
+// Trash never frees, or in a removed docker volume's export, which
+// stays in stagingDir until it is deleted.
+func runSummary(res executor.Result, stagingDir string) []string {
 	lines := []string{
 		fmt.Sprintf("Done: %d ok, %d failed. Run %s.", res.Done, res.Failed, res.RunID),
-		fmt.Sprintf("  Freed now          %10s", tui.HumanBytes(res.Bytes-res.TrashBytes-res.StagedBytes)),
+		fmt.Sprintf("  Freed now          %10s", tui.HumanBytes(res.Bytes-res.TrashBytes-res.StagedBytes-res.ExportedBytes)),
 		fmt.Sprintf("  In the Trash       %10s  freed once it is emptied; `regrow undo` restores", tui.HumanBytes(res.TrashBytes)),
 	}
 	if res.StagedBytes > 0 {
 		lines = append(lines, fmt.Sprintf("  In regrow staging  %10s  Finder was unavailable; emptying the Trash does not free it; `regrow undo` restores", tui.HumanBytes(res.StagedBytes)))
+	}
+	if res.ExportedBytes > 0 {
+		lines = append(lines,
+			fmt.Sprintf("  Volume exports     %10s  removed docker volumes, kept as tarballs in %s; delete that folder to free the room; `regrow undo` does not restore them", tui.HumanBytes(res.ExportedBytes), stagingDir),
+			"                                Docker hands the space it held for them back to the Mac only when it trims its disk image",
+		)
 	}
 	for _, f := range res.Failures {
 		lines = append(lines, "  failed: "+f)

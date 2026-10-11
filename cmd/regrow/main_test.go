@@ -94,7 +94,7 @@ func TestNothingToCleanShowsSkipReasons(t *testing.T) {
 func TestRunSummarySeparatesStagingFromTrash(t *testing.T) {
 	res := executor.Result{Done: 3, Bytes: 70 << 30, TrashBytes: 0, StagedBytes: 40 << 30,
 		Skipped: []string{"npm-cache: emptying the Trash failed, and Finder may still be emptying it"}}
-	out := strings.Join(runSummary(res), "\n")
+	out := strings.Join(runSummary(res, "/state/staging/run"), "\n")
 	for _, want := range [][2]string{
 		{"Freed now", "30.0 GiB"},
 		{"In the Trash", " 0 B"},

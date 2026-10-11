@@ -1006,8 +1006,9 @@ func checkPageTranscript(t *testing.T, lines []string) {
 	if res := ran.result; res == nil {
 		t.Error("section execute: want a done with the run's result")
 	} else {
-		need("execute", "a result under plan-all's id with bytes freed now, in the Trash and in staging", res.RunID == all.PlanID &&
-			res.Done == ran.done && res.Failed == 1 && res.TrashBytes > 0 && res.StagedBytes > 0 && res.Bytes > res.TrashBytes+res.StagedBytes &&
+		need("execute", "a result under plan-all's id with bytes freed now, in the Trash, in staging and in volume exports", res.RunID == all.PlanID &&
+			res.Done == ran.done && res.Failed == 1 && res.TrashBytes > 0 && res.StagedBytes > 0 && res.ExportedBytes > 0 &&
+			res.Bytes > res.TrashBytes+res.StagedBytes+res.ExportedBytes &&
 			len(res.Failures) == 1 && len(res.Skipped) == 0)
 	}
 	held := runOf("execute-trash-failed")
