@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/lbagic/regrow/internal/engine"
 	"github.com/lbagic/regrow/internal/executor"
@@ -66,6 +67,7 @@ type helloEvent struct {
 	Protocol int    `json:"protocol"`
 	Version  string `json:"version"`
 	FDA      FDA    `json:"fda"`
+	Self     string `json:"self,omitempty"`
 }
 
 // inlineEvent puts the fields of body, a JSON object, on the event
@@ -101,9 +103,14 @@ type startEvent struct {
 
 type findingEvent struct {
 	head
-	ScanID  string         `json:"scan_id"`
-	Index   int            `json:"index"`
-	TookMS  int64          `json:"took_ms"`
+	ScanID string `json:"scan_id"`
+	Index  int    `json:"index"`
+	TookMS int64  `json:"took_ms"`
+	// Bucket is the total the rule's bytes are counted in.
+	Bucket string `json:"bucket"`
+	// Select is the atoms that tick the row, absent when it cannot be
+	// ticked: a peer sends only atoms it was given here.
+	Select  []string       `json:"select,omitempty"`
 	Finding engine.Finding `json:"finding"`
 }
 
@@ -116,7 +123,13 @@ type summaryEvent struct {
 
 type planEvent struct {
 	head
-	PlanID string        `json:"plan_id"`
+	PlanID string `json:"plan_id"`
+	// ExpiresAt is the wall-clock moment after which an execute of the
+	// plan answers plan_expired.
+	ExpiresAt time.Time `json:"expires_at"`
+	// Select is the atoms the plan was built from, sorted: the
+	// request's, or the default selection when it sent none.
+	Select []string      `json:"select"`
 	Plan   engine.Plan   `json:"plan"`
 	Totals engine.Totals `json:"totals"`
 }

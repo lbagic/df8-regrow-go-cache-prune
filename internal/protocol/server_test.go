@@ -181,6 +181,79 @@ func TestScanPlanExecuteOverPipes(t *testing.T) {
 	}
 }
 
+// A finding event says which total its rule counts in and which atoms
+// tick its row, from the finding the engine keeps for planning.
+func TestFindingEventsCarryBucketAndSelect(t *testing.T) {
+	m := newMachine(t)
+	path := func(name string) string { return filepath.Join(m.home, "proj", name) }
+	findings := []engine.Finding{
+		{Rule: engine.Rule{ID: "fixture-steward", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}},
+			Items: []engine.Item{{Path: path("steward"), Bytes: 9}, {Path: path("steward-2"), Bytes: 1}}},
+		{Rule: engine.Rule{ID: "fixture-trash", Risk: engine.RiskCaution},
+			Items: []engine.Item{{Path: path("a"), Bytes: 5}, {Path: path("gated"), Partial: true}, {Path: path("b"), Bytes: 3, Partial: true}}},
+		{Rule: engine.Rule{ID: "fixture-shown", Risk: engine.RiskSurfaceOnly}, Items: []engine.Item{{Path: path("shown"), Bytes: 4}}},
+		{Rule: engine.Rule{ID: "fixture-phantom", Category: engine.CategoryPhantomSpace, Risk: engine.RiskCaution,
+			ToolQuery: "fixture", NativeCommand: engine.Argv{"fixture-thin", "{arg}"}},
+			Items: []engine.Item{{Label: "snapshot", Arg: "snap-1", Bytes: 2}}},
+		{Rule: engine.Rule{ID: "fixture-partial-steward", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}},
+			Items: []engine.Item{{Path: path("c"), Bytes: 1}, {Path: path("gated-2"), Partial: true}}},
+		{Rule: engine.Rule{ID: "fixture-failed", Risk: engine.RiskSafe}, Err: "tool gave no answer"},
+		{Rule: engine.Rule{ID: "fixture-empty", Risk: engine.RiskSafe}},
+	}
+	want := []struct {
+		bucket string
+		sel    string
+	}{
+		{engine.BucketFreesNow, "fixture-steward"},
+		{engine.BucketAfterTrash, "fixture-trash/~/proj/a,fixture-trash/~/proj/b"},
+		{engine.BucketShownOnly, ""},
+		{engine.BucketMacOSManaged, "fixture-phantom/snap-1"},
+		{engine.BucketFreesNow, ""},
+		{engine.BucketAfterTrash, ""},
+		{engine.BucketAfterTrash, ""},
+	}
+	srv := m.server()
+	srv.Catalog = make([]engine.Rule, len(findings))
+	for i, f := range findings {
+		srv.Catalog[i] = f.Rule
+	}
+	srv.Scan = scanOf(findings)
+	p := start(t, srv)
+	p.expect("hello")
+
+	p.send(`{"type":"scan","id":"s"}`)
+	scan := p.expect("start/s", "finding/s", "finding/s", "finding/s", "finding/s", "finding/s", "finding/s", "finding/s", "done/s")
+	var offered []string
+	for i, e := range scan[1:8] {
+		if e.Bucket != want[i].bucket {
+			t.Errorf("%s: bucket = %q, want %q", e.Finding.Rule.ID, e.Bucket, want[i].bucket)
+		}
+		if got := strings.Join(e.Select, ","); got != want[i].sel {
+			t.Errorf("%s: select = %q, want %q", e.Finding.Rule.ID, got, want[i].sel)
+		}
+		if want[i].sel == "" && strings.Contains(e.raw, `"select"`) {
+			t.Errorf("a row that cannot be ticked carries no select: %s", e.raw)
+		}
+		offered = append(offered, e.Select...)
+	}
+
+	// Every atom handed out plans: none is unmatched, and the unreadable
+	// item no atom names stays out of the plan.
+	sent, err := json.Marshal(offered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := p.planned("p", scan[0].ScanID, string(sent)).Plan
+	if len(plan.Actions) != 4 || len(plan.Unmatched) != 0 {
+		t.Fatalf("plan of every offered atom = %+v, want four actions", plan)
+	}
+	for _, a := range plan.Actions {
+		if a.Path == path("gated") {
+			t.Errorf("an unreadable item was planned: %+v", a)
+		}
+	}
+}
+
 func TestPlanSelection(t *testing.T) {
 	m := newMachine(t)
 	sudoRule := engine.Rule{ID: "fixture-sudo", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}, Sudo: true}
@@ -243,6 +316,53 @@ func TestPlanSelection(t *testing.T) {
 			t.Errorf("%s: plan id %s was issued twice", tt.name, e.PlanID)
 		}
 		ids[e.PlanID] = true
+	}
+}
+
+// The engine face passes its own name and its program lookup to the
+// planner: a sudo skip names this engine, and an action whose program
+// is missing is a skip, not an action that fails when run.
+func TestPlanSkipsNameThisEngineAndMissingPrograms(t *testing.T) {
+	m := newMachine(t)
+	item := func(name string, bytes int64) []engine.Item {
+		return []engine.Item{{Path: filepath.Join(m.home, "proj", name), Bytes: bytes}}
+	}
+	extra := []engine.Finding{
+		{Rule: engine.Rule{ID: "fixture-sudo", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}, Sudo: true}, Items: item("system", 7)},
+		{Rule: engine.Rule{ID: "fixture-gone", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"gone-tool", "clean"}}, Items: item("gone", 11)},
+		{Rule: engine.Rule{ID: "fixture-here", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe", "--all"}}, Items: item("here", 13)},
+	}
+	srv := m.server()
+	for _, f := range extra {
+		srv.Catalog = append(srv.Catalog, f.Rule)
+	}
+	srv.Scan = scanOf(append(m.findings(), extra...))
+	srv.Self = "/Users/dev/Applications/Fixture App.app/Contents/MacOS/regrow-engine"
+	srv.CleanFlags = []string{"--beta-rules"}
+	srv.LookPath = func(file string) (string, error) {
+		if file == "gone-tool" {
+			return "", errors.New("executable file not found in $PATH")
+		}
+		return "/fixture/bin/" + file, nil
+	}
+	p := start(t, srv)
+	if hello := p.expect("hello")[0]; hello.Self != srv.Self {
+		t.Errorf("hello = %s, want self %q: the command a face tells the owner to type", hello.raw, srv.Self)
+	}
+
+	e := p.planned("p", p.scanned("s", 5), "")
+	if got := actionRules(e.Plan); got != "fixture-cache,fixture-here" {
+		t.Errorf("actions = %q, want the Trash move and the command whose program was found", got)
+	}
+	want := []engine.Skip{
+		{RuleID: "fixture-sudo", Reason: "needs administrator rights — run `'/Users/dev/Applications/Fixture App.app/Contents/MacOS/regrow-engine' clean --beta-rules fixture-sudo` in Terminal"},
+		{RuleID: "fixture-gone", Reason: "`gone-tool` is not on the PATH regrow was started with"},
+	}
+	if !sameJSON(t, e.Plan.Skipped, want) {
+		t.Errorf("skipped = %+v, want %+v", e.Plan.Skipped, want)
+	}
+	if *e.Totals != (engine.Totals{FreesNow: 13, AfterTrash: 100}) {
+		t.Errorf("totals = %+v: a skip adds nothing", *e.Totals)
 	}
 }
 
@@ -326,6 +446,71 @@ func TestPlanExpiresAfterTenMinutes(t *testing.T) {
 	p.send(`{"type":"execute","id":"x5","plan_id":"` + fresh.PlanID + `"}`)
 	if done := p.expect("journal/x5", "journal/x5", "done/x5")[2]; done.Result.Done != 1 || exists(m.logs) {
 		t.Fatalf("the fresh plan did not run: %s", done.raw)
+	}
+}
+
+// expires_at is the moment the plan stops running: an execute at it
+// runs, one a nanosecond past it is refused.
+func TestPlanEventSaysWhenThePlanExpires(t *testing.T) {
+	m := newMachine(t)
+	made := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	clock := &fakeClock{now: made}
+	srv := m.server()
+	srv.Now = clock.Now
+	p := start(t, srv)
+	p.expect("hello")
+
+	onTime := p.planned("p1", p.scanned("s1", 2), `["fixture-cache"]`)
+	if want := made.Add(10 * time.Minute); !onTime.ExpiresAt.Equal(want) || !strings.Contains(onTime.raw, `"expires_at":"2026-10-04T12:10:00Z"`) {
+		t.Fatalf("plan = %s, want expires_at %s in RFC 3339", onTime.raw, want)
+	}
+	clock.advance(onTime.ExpiresAt.Sub(made))
+	p.send(`{"type":"execute","id":"x1","plan_id":"` + onTime.PlanID + `"}`)
+	p.expect("journal/x1", "journal/x1", "done/x1")
+
+	made = clock.Now()
+	late := p.planned("p2", p.scanned("s2", 2), `["fixture-logs"]`)
+	clock.advance(late.ExpiresAt.Sub(made) + time.Nanosecond)
+	p.send(`{"type":"execute","id":"x2","plan_id":"` + late.PlanID + `"}`)
+	p.expectError("x2", CodePlanExpired)
+	if !exists(m.logs) {
+		t.Fatal("a plan past its expires_at moved its target")
+	}
+
+	// A shorter life moves expires_at with it.
+	short := m.server()
+	short.Now = func() time.Time { return made }
+	short.PlanTTL = 90 * time.Second
+	q := start(t, short)
+	q.expect("hello")
+	if e := q.planned("p", q.scanned("s", 2), ""); !e.ExpiresAt.Equal(made.Add(90 * time.Second)) {
+		t.Fatalf("plan = %s, want expires_at 90 s after %s", e.raw, made)
+	}
+}
+
+// A plan event echoes the atoms it was built from, sorted: what a peer
+// sent, or the default selection when it sent none.
+func TestPlanEventEchoesItsSelection(t *testing.T) {
+	m := newMachine(t)
+	p := start(t, m.server())
+	p.expect("hello")
+	scanID := p.scanned("s", 2)
+	tests := []struct {
+		name       string
+		selectJSON string
+		want       string
+	}{
+		{"no select echoes the default selection", "", `"select":["fixture-cache"]`},
+		{"null select too", "null", `"select":["fixture-cache"]`},
+		{"an empty select is echoed empty", "[]", `"select":[]`},
+		{"sent atoms come back sorted, each once",
+			`["fixture-logs/~/proj/logs","fixture-cache","fixture-logs/~/proj/logs"]`,
+			`"select":["fixture-cache","fixture-logs/~/proj/logs"]`},
+	}
+	for _, tt := range tests {
+		if e := p.planned("p", scanID, tt.selectJSON); !strings.Contains(e.raw, tt.want) {
+			t.Errorf("%s: plan = %s, want %s", tt.name, e.raw, tt.want)
+		}
 	}
 }
 

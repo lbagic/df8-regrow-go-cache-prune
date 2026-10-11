@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -13,6 +14,7 @@ import (
 	"github.com/lbagic/regrow/internal/engine"
 	"github.com/lbagic/regrow/internal/executor"
 	"github.com/lbagic/regrow/internal/headroom"
+	"github.com/lbagic/regrow/internal/oplog"
 	"github.com/lbagic/regrow/internal/protocol"
 	"github.com/lbagic/regrow/internal/scanner"
 )
@@ -32,7 +34,35 @@ func runEngine(host engine.Host, catalog []engine.Rule, opts options) error {
 	if err != nil {
 		return err
 	}
-	return newEngineServer(host, catalog, flags).Serve(ctx, os.Stdin, os.Stdout)
+	srv := newEngineServer(host, catalog, flags)
+	srv.Self = engineSelf(os.Executable, exec.LookPath)
+	srv.LookPath = exec.LookPath
+	return srv.Serve(ctx, os.Stdin, os.Stdout)
+}
+
+// engineSelf is how the owner starts this binary in Terminal: `regrow`
+// when that name on PATH is this very file, else the executable's path,
+// as inside an app bundle.
+func engineSelf(executable func() (string, error), lookPath func(string) (string, error)) string {
+	const name = "regrow"
+	self, err := executable()
+	if err != nil {
+		return name
+	}
+	onPath, err := lookPath(name)
+	if err != nil {
+		return self
+	}
+	// Stat follows symlinks: a package manager's link on PATH is the
+	// same file as the binary it points at.
+	a, err := os.Stat(self)
+	if err != nil {
+		return self
+	}
+	if b, err := os.Stat(onPath); err == nil && os.SameFile(a, b) {
+		return name
+	}
+	return self
 }
 
 // keepRunningOnEPIPE makes a write to a closed stdout fail with EPIPE
@@ -55,6 +85,7 @@ func newEngineServer(host engine.Host, catalog []engine.Rule, flags []string) *p
 		Account:    engine.Account,
 		Headroom:   headroom.Take,
 		Tick:       tickFor(host, catalog),
+		Staged:     stagedBytes,
 		NewExecutor: func(runID string) (*executor.Executor, func(), error) {
 			return newRunExecutor(host, runID, dockerStream)
 		},
@@ -69,6 +100,18 @@ func tickFor(host engine.Host, catalog []engine.Rule) func(context.Context, bool
 		}
 		return ap.Tick(ctx, autotrim)
 	}
+}
+
+// stagedBytes measures regrow's staging directory, where a run puts
+// what Finder could not take and the docker volume exports: 0 when
+// there is none, a lower bound when part of it cannot be read.
+func stagedBytes(ctx context.Context) int64 {
+	logPath, err := oplog.DefaultPath()
+	if err != nil {
+		return 0
+	}
+	usage, _ := scanner.DirSize(ctx, stagingRoot(logPath))
+	return usage.Bytes
 }
 
 // engineAutopilot is the autopilot with the engine's steward-command

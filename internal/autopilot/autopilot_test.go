@@ -2,6 +2,7 @@ package autopilot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"os"
@@ -337,6 +338,58 @@ func TestTickRecordsTheSampleAndReportsCrossings(t *testing.T) {
 	again, err := h.ap.Tick(context.Background(), false)
 	if err != nil || len(again.Alerts) != 0 {
 		t.Errorf("second tick: alerts %+v, err %v; want none", again.Alerts, err)
+	}
+}
+
+// A tick without a forecast says why, and only when it read the
+// history: an unreadable one is no judgement of it.
+func TestTickSaysWhyThereIsNoForecast(t *testing.T) {
+	seed := func(h *harness, freeGiB ...int64) {
+		t.Helper()
+		path := filepath.Join(h.ap.StateDir, headroom.FileName)
+		for i, free := range freeGiB {
+			s := headroom.Sample{At: start.Add(time.Duration(i-len(freeGiB)) * time.Hour), Total: 460 * gib, Free: free * gib}
+			if err := headroom.Append(path, s); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	tests := []struct {
+		name         string
+		prepare      func(h *harness)
+		want         string
+		wantForecast bool
+		wantErr      error
+	}{
+		{"the first sample is a short history", func(*harness) {}, headroom.ShortHistory, false, nil},
+		{"two hours of samples are a short history", func(h *harness) { seed(h, 82, 81) }, headroom.ShortHistory, false, nil},
+		{"steady free space is not falling", func(h *harness) { seed(h, 80, 80, 80, 80, 80) }, headroom.NotFalling, false, nil},
+		{"rising free space is not falling", func(h *harness) { seed(h, 76, 77, 78, 79) }, headroom.NotFalling, false, nil},
+		{"a forecast needs no reason", func(h *harness) { seed(h, 85, 84, 83, 82, 81) }, "", true, nil},
+		{"an unreadable history gives none", func(h *harness) {
+			if err := os.MkdirAll(filepath.Join(h.ap.StateDir, headroom.FileName), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}, "", false, ErrHistoryUnreadable},
+	}
+	for _, tt := range tests {
+		h := newHarness(t)
+		h.free = 80 * gib
+		tt.prepare(h)
+		tick, err := h.ap.Tick(context.Background(), false)
+		if !errors.Is(err, tt.wantErr) {
+			t.Fatalf("%s: err = %v, want %v", tt.name, err, tt.wantErr)
+		}
+		if tick.NoForecast != tt.want || (tick.DaysToFull != nil) != tt.wantForecast {
+			t.Errorf("%s: no_forecast = %q with days to full %v; want %q, forecast %v", tt.name, tick.NoForecast, tick.DaysToFull, tt.want, tt.wantForecast)
+		}
+		raw, err := json.Marshal(tick)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if has := strings.Contains(string(raw), `"no_forecast":"`+tt.want+`"`); has != (tt.want != "") || (tt.want == "" && strings.Contains(string(raw), "no_forecast")) {
+			t.Errorf("%s: tick = %s, want no_forecast %q (absent when empty)", tt.name, raw, tt.want)
+		}
 	}
 }
 

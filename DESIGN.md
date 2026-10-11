@@ -1,6 +1,6 @@
 # Design
 
-The look of regrow's scan page: the findings, the plan and the confirm step, shown in the menubar app's window. It is a reading list: the consequence as a headline, the safe findings folded into one line, and each decision that is the owner's as a short text with its size drawn beside it.
+The look of regrow's scan page (`app/Resources/page.html`): the findings, the plan, the confirm step, the run and its result, shown in the menubar app's window. It is a reading list: the consequence as a headline, the safe findings folded into one line, and each decision that is the owner's as a short text with its size drawn beside it.
 
 ## Tokens
 
@@ -33,7 +33,7 @@ The page follows `prefers-color-scheme`; `data-theme="light|dark"` on `<html>` o
 - `--danger` marks what cannot be undone or did not work: the run button and its tick box, the "Not scanned" heading, error text. `--caution` colours an icon only, never a fill.
 - The four `--b-*` colours each stand for one total, on every mark of that total and on nothing else: its swatch, its rule, its size bars, its meter segment. `--b-now` frees now, `--b-trash` after the Trash is emptied, `--b-shown` shown only, `--b-macos` macOS-managed. They hold apart for every pair, also under protanopia and deuteranopia, only at these values: a change to one is checked against the other three in both themes.
 - `--taken`, `--purge` and `--track` draw the disk meter: taken, purgeable, free.
-- Every surface is flat `--paper`. `--panel` fills only the tray and a notice; `--accent-soft` only a row that arrived a moment ago and a finished step.
+- Every surface is flat `--paper`. `--panel` fills only the tray and a notice; `--accent-soft` only a row that arrived a moment ago, a finished step, and the plan's group whose action is running.
 
 ## Type
 
@@ -69,7 +69,7 @@ A size is the figure and its unit set apart: the unit at regular weight in `--in
 4. **Four totals**, side by side: a 4px rule filled against the largest of the four, the figure, a swatch and a label saying when the space comes back. They are never added up, and a line under them says so. While a scan runs each reads "pending".
 5. **Notice** (Full Disk Access off): one `--panel` row, a lock icon, a sentence, its action on the right.
 6. **Sections**, in this order, each only when it has rows: Not scanned, Safe to clear, Your call, Only shown. A header is the title, a count in words, and on the right the bar scale or a link.
-7. **Tray**: the three steps (Findings, Plan, Confirm) as numbered circles, a sentence on where things stand, the next action as the one filled button.
+7. **Tray**: the three steps (Findings, Plan, Confirm) as numbered circles, a sentence on where things stand, the next action as the one filled button. On the findings, the sentence counts what is ticked, the skips its plan would have, and what that frees, by total.
 
 ## Findings
 
@@ -79,6 +79,8 @@ A size is the figure and its unit set apart: the unit at regular weight in `--in
 - A lower bound is written "≥ " before the figure. A row nothing could be read from has no bar and no figure: a lock, "unreadable", and what it needs.
 - A row whose folder also holds other rows draws and writes its own bytes, and says under them how much the folder holds.
 - A rule that failed is in "Not scanned": its title, the error in mono `--danger`, and no size.
+- **A finding's items**: a finding with more than one item gives its count beside the title as an `--accent` link ("10 of 12 folders"; "4 items" where nothing can be picked one by one). It opens into compact rows under the finding's text: a tick box only where the item can be picked, the path in mono with `~` (or the item's label), its last use as a secondary line, and on the right a bar and size on the list's shared scale. An item nothing could be read from shows the lock and "unreadable".
+- A tick box exists only where the engine handed the row its atoms; the page has no rule of its own about what may be deleted.
 
 ## Size bars
 
@@ -86,16 +88,22 @@ A 6px bar on a 1px `--line-strong` hairline the full width of its column; the fi
 
 ## Plan and confirm
 
-- **Plan**: a headline with the number of actions; one paragraph, with swatches, on what frees as commands run and has no undo and what goes to the Trash; the disk meter as it will stand, with "free once the commands end". Then "Skipped" with each reason, before "In the order they run": a sequence number (a range for a group), the title, the first command or path in mono with "and N more like it", what runs first and what else is removed, and on the right the bar, the size, and "no undo" or "undo restores".
+- **Plan**: a headline with the number of actions; one paragraph, with swatches, on what frees as commands run and has no undo and what goes to the Trash; the disk meter as it will stand, with "free once the commands end". Then "Skipped" with each reason, before "In the order they run": a sequence number (a range for a group), the title, the first command or path in mono with "and N more like it" (a link that opens the group to every line), what runs first and what else is removed, and on the right the bar, the size, and "no undo" or "undo restores".
 - **Confirm**: one centred column, at most 560px: the question as the headline, a list pairing each figure with a sentence, then a tick box that unlocks the `--danger` button. Return never runs the plan.
+- **The run**: the plan's list stays, every line of each group shown and marked by a 14px icon: a ring waiting, a filled dot running, a tick done in `--accent`, a cross failed in `--danger` with its error in mono `--danger` under it, a dash skipped. The running group takes `--accent-soft`, and its size column says in words what became of its lines ("2 done, running"). The top bar holds the progress and "Stop after this action"; the tray has no button.
+- **The result**: a headline counting what was done, failed and skipped; a paragraph with swatches on what is free now, what is in the Trash and what is in regrow staging; `regrow undo <run id>` in selectable mono whenever anything went to the Trash or staging, `regrow` being the command the engine's `hello` names (an app's engine by its path), quoted for a shell. "Failed" comes first, as a `--danger` section, then the list as it ran, marked. "Scan again" is the one way on.
 
 ## Wording
 
 - Sizes as `engine.HumanBytes` prints them.
 - Say when space comes back, in plain words: "frees now", "after the Trash is emptied", "shown only", "macOS reclaims it by itself".
 - Ages: today, yesterday, N days ago, N months ago.
-- The home folder is written `~`. A command or path wraps at a space or after a slash, never inside a name; the exact command is in the element's `title`.
+- The home folder is written `~`, except in a command the owner is told to paste into Terminal and in a tool's own error text, which stay as written. A command or path wraps at a space or after a slash, never inside a name; the exact command is in the element's `title`.
+
+## The menu
+
+The menu bar menu is native: system controls and text only, in the order the owner reads it (figures, the last check, autotrim, Full Disk Access, staging, the login environment when it could not be read, "Scan…", "Quit regrow"). None of the page's colours or type reaches it.
 
 ## Checking a change
 
-Screenshot every state through WebKit, the engine the app's web view uses, at 900×640: results in light and dark; scanning, a rule error, no forecast, plan and confirm in at least one theme. Hold each against this file.
+`just page-check` draws every state through WebKit, the engine the app's web view uses, at 900×640, from the recorded engine transcript, and writes a PNG of each: results, plan and confirm in light and dark, every other state in light. Hold each against this file.

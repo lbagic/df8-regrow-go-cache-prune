@@ -158,8 +158,8 @@ func (a *Autopilot) Tick(ctx context.Context, autotrim bool) (headroom.Tick, err
 		errs = append(errs, fmt.Errorf("%w: %s: %v", ErrHistoryUnreadable, path, herr))
 	} else {
 		cur := append(prev[:len(prev):len(prev)], s)
-		days, forecast = headroom.Forecast(cur)
-		if forecast {
+		days, tick.NoForecast = headroom.ForecastOrWhy(cur)
+		if forecast = tick.NoForecast == ""; forecast {
 			tick.DaysToFull = &days
 		}
 		tick.Alerts = a.nameTopProcess(ctx, headroom.Alerts(prev, cur))

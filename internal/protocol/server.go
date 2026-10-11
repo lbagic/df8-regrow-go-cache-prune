@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,6 +60,10 @@ type Server struct {
 	// autopilot.Autopilot.Tick, autotrim gate included. Nil refuses
 	// tick requests.
 	Tick func(ctx context.Context, autotrim bool) (headroom.Tick, error)
+	// Staged measures what regrow's staging directory holds, for a
+	// tick's staged_bytes: a lower bound where part of it cannot be
+	// read. Nil omits the field.
+	Staged func(ctx context.Context) int64
 	// NewExecutor builds the executor of one run: journal open, mover
 	// and pre-actions pointed at the run's staging directory. release
 	// is called once the run has ended. The server sets the run id,
@@ -75,6 +80,13 @@ type Server struct {
 	// this engine's catalog (--rules-dir, --beta-rules); sudo skips
 	// name them.
 	CleanFlags []string
+	// Self is how the owner starts this engine's binary in Terminal;
+	// sudo skips and hello name it. Empty means `regrow`.
+	Self string
+	// LookPath finds a steward command's program, in the shape of
+	// exec.LookPath: a plan skips an action whose program it does not
+	// find. Nil plans without looking.
+	LookPath func(file string) (string, error)
 
 	exitGrace time.Duration
 	moveLimit time.Duration
@@ -145,7 +157,7 @@ func (srv *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error
 	if probe == nil {
 		probe = func() FDA { return ProbeFDA(srv.Host) }
 	}
-	s.emit(helloEvent{head{Event: "hello"}, Version, srv.Version, probe()})
+	s.emit(helloEvent{head{Event: "hello"}, Version, srv.Version, probe(), srv.Self})
 
 	lines := make(chan requestLine)
 	quit := make(chan struct{})
@@ -345,12 +357,12 @@ func (s *session) runScan(ctx context.Context, cancel context.CancelFunc, op *op
 		}
 		f = encodable(f)
 		f.FillItemKeys(s.srv.Host.Home)
-		ev := findingEvent{head{"finding", op.re}, sc.id, i, took.Milliseconds(), f}
+		ev := findingEvent{head{"finding", op.re}, sc.id, i, took.Milliseconds(), engine.Bucket(f.Rule), engine.Selectable(f), f}
 		if !s.emit(ev) {
 			// The row still has to arrive, or the peer waits on this
 			// rule forever; the engine keeps what the peer saw.
 			f = engine.Finding{Rule: f.Rule, Err: "finding could not be encoded"}
-			ev.Finding = f
+			ev.Select, ev.Finding = engine.Selectable(f), f
 			s.emit(ev)
 		}
 		findings[i] = f
@@ -413,7 +425,14 @@ func (s *session) plan(req request) {
 			selected[atom] = true
 		}
 	}
-	plan := engine.BuildPlanWith(s.srv.Host, sc.findings, selected, engine.PlanOptions{NoSudo: true, CleanFlags: s.srv.CleanFlags})
+	atoms := make([]string, 0, len(selected))
+	for atom := range selected {
+		atoms = append(atoms, atom)
+	}
+	sort.Strings(atoms)
+	plan := engine.BuildPlanWith(s.srv.Host, sc.findings, selected, engine.PlanOptions{
+		NoSudo: true, CleanFlags: s.srv.CleanFlags, Self: s.srv.Self, LookPath: s.srv.LookPath,
+	})
 	if len(plan.Unmatched) > 0 {
 		// As `regrow clean` does: a typo must never run less, or for a
 		// rule atom more, than the peer meant.
@@ -434,16 +453,21 @@ func (s *session) plan(req request) {
 	}
 	id := newPlanID(now)
 	s.plans[id] = heldPlan{plan: plan, scan: sc, created: now}
-	s.emit(planEvent{head{"plan", req.ID}, id, plan, plan.Totals()})
+	s.emit(planEvent{head{"plan", req.ID}, id, now.Add(s.planTTL()).UTC(), atoms, plan, plan.Totals()})
 	s.emit(done(req.ID))
 }
 
-func (s *session) expired(held heldPlan, now time.Time) bool {
-	ttl := s.srv.PlanTTL
-	if ttl == 0 {
-		ttl = defaultPlanTTL
+func (s *session) planTTL() time.Duration {
+	if s.srv.PlanTTL != 0 {
+		return s.srv.PlanTTL
 	}
-	return held.expired || now.Sub(held.created) > ttl
+	return defaultPlanTTL
+}
+
+// expired: a plan runs up to and at created plus the TTL, the moment
+// its plan event announced as expires_at.
+func (s *session) expired(held heldPlan, now time.Time) bool {
+	return held.expired || now.Sub(held.created) > s.planTTL()
 }
 
 func (s *session) startExecute(req request) {
@@ -552,7 +576,11 @@ func (s *session) startTick(req request) {
 		if !tick.At.IsZero() {
 			// A sampled tick is reported even when it also failed: a
 			// refused autotrim must not hide the alerts.
-			s.emit(inlineEvent{head{"tick", op.re}, tickBody{tick, unreadable}})
+			body := tickBody{Tick: tick, HistoryUnreadable: unreadable}
+			if s.srv.Staged != nil {
+				body.StagedBytes = s.srv.Staged(context.Background())
+			}
+			s.emit(inlineEvent{head{"tick", op.re}, body})
 		}
 		var terminal any = done(op.re)
 		switch {
@@ -565,12 +593,13 @@ func (s *session) startTick(req request) {
 	}()
 }
 
-// tickBody is a tick event's fields: the tick's own, and whether the
+// tickBody is a tick event's fields: the tick's own, whether the
 // headroom history could not be read, which leaves the tick without a
-// forecast or alerts.
+// forecast or alerts, and the bytes in regrow's staging directory.
 type tickBody struct {
 	headroom.Tick
-	HistoryUnreadable bool `json:"history_unreadable,omitempty"`
+	HistoryUnreadable bool  `json:"history_unreadable,omitempty"`
+	StagedBytes       int64 `json:"staged_bytes,omitempty"`
 }
 
 // splitHistoryUnreadable takes autopilot.ErrHistoryUnreadable out of a

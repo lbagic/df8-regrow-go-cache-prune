@@ -140,6 +140,42 @@ func DefaultSelection(findings []Finding) map[string]bool {
 	return sel
 }
 
+// Selectable is the atoms that tick f's row for a face that lets the
+// owner pick, in item order; nil when the row cannot be ticked. A rule
+// that acts per item gives the ids of the items that were read, so an
+// unreadable one can never be picked. Any other rule is all or nothing:
+// its id alone when every item was read, nil otherwise. A rule that is
+// never deleted, found nothing or failed has nothing to tick. f's items
+// carry their keys (FillItemKeys); items without one are never offered
+// one by one.
+func Selectable(f Finding) []string {
+	if !f.Rule.Risk.Actionable() || len(f.Items) == 0 || f.Err != "" {
+		return nil
+	}
+	var read []string
+	seen := map[string]bool{}
+	nRead, keyed := 0, true
+	for _, it := range f.Items {
+		if it.Unreadable() {
+			continue
+		}
+		nRead++
+		keyed = keyed && it.Key != ""
+		// Items that share an id tick together: one atom.
+		if id := ItemID(f.Rule.ID, it.Key); !seen[id] {
+			seen[id] = true
+			read = append(read, id)
+		}
+	}
+	switch {
+	case f.Rule.PerItemActionable() && nRead > 0 && keyed:
+		return read
+	case nRead == len(f.Items):
+		return []string{f.Rule.ID}
+	}
+	return nil
+}
+
 // selection is the parsed form of the atom map: whole-rule atoms and
 // per-item atoms ("ruleID/key"), kept separate so partial selections
 // are detectable.
@@ -252,6 +288,44 @@ type PlanOptions struct {
 	// CleanFlags go into that command before the selector, so Terminal
 	// loads the same catalog (--rules-dir, --beta-rules).
 	CleanFlags []string
+	// Self is the program that command names: how the owner starts this
+	// regrow in Terminal. Empty means `regrow`.
+	Self string
+	// LookPath finds a steward command's program, in the shape of
+	// exec.LookPath. An action whose program it does not find is a skip
+	// that says so, not an action that fails when run. Nil plans without
+	// looking.
+	LookPath func(file string) (string, error)
+}
+
+// refusal says why the face cannot run r's steward command: nil when it
+// can, else the reason as a function of the `regrow clean` selector
+// that names what was refused. The program is looked up first, so a
+// missing one reads as missing whatever rights it would have needed.
+func (o PlanOptions) refusal(r Rule) func(selector string) string {
+	if o.LookPath != nil {
+		program := r.NativeCommand[0]
+		if _, err := o.LookPath(program); err != nil {
+			return func(string) string {
+				return "`" + program + "` is not on the PATH regrow was started with"
+			}
+		}
+	}
+	if o.NoSudo && r.Sudo {
+		self := o.Self
+		if self == "" {
+			self = "regrow"
+		}
+		return func(selector string) string {
+			words := []string{shellQuote(self), "clean"}
+			for _, a := range o.CleanFlags {
+				words = append(words, shellQuote(a))
+			}
+			words = append(words, shellQuote(selector))
+			return "needs administrator rights — run `" + strings.Join(words, " ") + "` in Terminal"
+		}
+	}
+	return nil
 }
 
 // BuildPlanWith is BuildPlan with options.
@@ -288,9 +362,11 @@ func BuildPlanWith(host Host, findings []Finding, selected map[string]bool, opts
 			ds, skips = nativeDrafts(findings, tree, host, f.Rule, refs, partial)
 			// Before nesting: a refused action must not cover the
 			// items nested inside it.
-			if opts.NoSudo && f.Rule.Sudo && len(ds) > 0 {
-				skips = append(skips, sudoSkips(f.Rule.ID, ds, partial, opts.CleanFlags)...)
-				ds = nil
+			if len(ds) > 0 {
+				if reason := opts.refusal(f.Rule); reason != nil {
+					skips = append(skips, refusedSkips(f.Rule.ID, ds, partial, reason)...)
+					ds = nil
+				}
 			}
 		} else {
 			ds, skips = trashDrafts(findings, tree, host, f.Rule, refs)
@@ -550,18 +626,11 @@ func runningAncestor(tree forest, owner map[itemRef]int, kept []bool, ref itemRe
 	return top
 }
 
-// sudoSkips turns a sudo rule's drafts into skips that name the
-// `regrow clean` selector running the same selection: the rule id when
-// the whole rule was selected, else each item id.
-func sudoSkips(ruleID string, ds []draft, partial bool, flags []string) []Skip {
-	reason := func(selector string) string {
-		words := []string{"regrow", "clean"}
-		for _, a := range flags {
-			words = append(words, shellQuote(a))
-		}
-		words = append(words, shellQuote(selector))
-		return "needs administrator rights — run `" + strings.Join(words, " ") + "` in Terminal"
-	}
+// refusedSkips turns a refused rule's drafts into skips: one for the
+// rule when the whole rule was selected, else one per item. reason is
+// given the `regrow clean` selector running the same selection, the
+// rule id or the item id.
+func refusedSkips(ruleID string, ds []draft, partial bool, reason func(selector string) string) []Skip {
 	if !partial {
 		return []Skip{{RuleID: ruleID, Reason: reason(ruleID)}}
 	}

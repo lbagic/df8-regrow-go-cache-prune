@@ -60,16 +60,37 @@ func (l Ledger) Share(f Finding) int64 {
 	return n
 }
 
-// add counts n bytes of rule r's items in the bucket the rule implies.
-// Phantom space comes first: macOS manages it whatever command the
-// rule carries.
-func (t *Totals) add(r Rule, n int64) {
+// The buckets, each named as its Totals field is in JSON.
+const (
+	BucketFreesNow     = "frees_now"
+	BucketAfterTrash   = "after_trash"
+	BucketShownOnly    = "shown_only"
+	BucketMacOSManaged = "macos_managed"
+)
+
+// Bucket is the total rule r's bytes are counted in. Phantom space
+// comes first: macOS manages it whatever command the rule carries.
+func Bucket(r Rule) string {
 	switch {
 	case r.Category == CategoryPhantomSpace:
-		t.MacOSManaged += n
+		return BucketMacOSManaged
 	case !r.Risk.Actionable():
-		t.ShownOnly += n
+		return BucketShownOnly
 	case len(r.NativeCommand) > 0 || r.Prune != nil:
+		return BucketFreesNow
+	default:
+		return BucketAfterTrash
+	}
+}
+
+// add counts n bytes of rule r's items in the rule's bucket.
+func (t *Totals) add(r Rule, n int64) {
+	switch Bucket(r) {
+	case BucketMacOSManaged:
+		t.MacOSManaged += n
+	case BucketShownOnly:
+		t.ShownOnly += n
+	case BucketFreesNow:
 		t.FreesNow += n
 	default:
 		t.AfterTrash += n

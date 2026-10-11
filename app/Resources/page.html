@@ -1,0 +1,920 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>regrow</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --paper: #fafbf8; --panel: #eff2ec; --ink: #18211b; --ink-2: #56635a; --ink-3: #88948b;
+  --line: #d9dfd6; --line-strong: #c3ccc0;
+  --accent: #1e6a45; --accent-soft: #ddebdf; --on-accent: #ffffff;
+  --caution: #9a5b00; --danger: #b3261e; --on-danger: #ffffff;
+  --taken: #7b887f; --purge: #b3beb5; --track: #e2e7df;
+  --b-now: #3280de; --b-trash: #039868; --b-shown: #4a3ba8; --b-macos: #da6e97;
+  --serif: ui-serif, "New York", Georgia, serif;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #131714; --panel: #1b211c; --ink: #e6ece5; --ink-2: #9daa9f; --ink-3: #6e7a71;
+    --line: #2b332d; --line-strong: #3c463e;
+    --accent: #78c79a; --accent-soft: #1f3327; --on-accent: #0e1a12;
+    --caution: #e0a84a; --danger: #f08a80; --on-danger: #2a0f0c;
+    --taken: #8d9a90; --purge: #56625a; --track: #2a322c;
+    --b-now: #4795f4; --b-trash: #30ac7d; --b-shown: #6456b5; --b-macos: #b53266;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #131714; --panel: #1b211c; --ink: #e6ece5; --ink-2: #9daa9f; --ink-3: #6e7a71;
+  --line: #2b332d; --line-strong: #3c463e;
+  --accent: #78c79a; --accent-soft: #1f3327; --on-accent: #0e1a12;
+  --caution: #e0a84a; --danger: #f08a80; --on-danger: #2a0f0c;
+  --taken: #8d9a90; --purge: #56625a; --track: #2a322c;
+  --b-now: #4795f4; --b-trash: #30ac7d; --b-shown: #6456b5; --b-macos: #b53266;
+}
+:root[data-theme="light"] { color-scheme: light; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink); font: 13px/1.4 var(--sans);
+  display: grid; grid-template: 42px minmax(0, 1fr) 60px / minmax(0, 1fr); overflow: hidden;
+  -webkit-font-smoothing: antialiased; cursor: default; -webkit-user-select: none;
+}
+h1, h2, h3, h4, p, dl, dd, ol { margin: 0; padding: 0; }
+button { font: inherit; color: inherit; background: none; border: 0; border-radius: 3px; padding: 0; cursor: default; }
+svg { width: 14px; height: 14px; flex: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; height: 15px; }
+.mono { font: 12px/1.5 var(--mono); -webkit-user-select: text; cursor: text; }
+.nb { white-space: nowrap; }
+.unit { font-weight: 400; color: var(--ink-2); }
+.err { color: var(--danger); overflow-wrap: anywhere; white-space: pre-wrap; }
+.link { color: var(--accent); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.link:disabled { color: var(--ink-3); }
+.grow { flex: 1; }
+
+/* one colour per total, on every mark that stands for it */
+.frees_now { background: var(--b-now); }
+.after_trash { background: var(--b-trash); }
+.shown_only { background: var(--b-shown); }
+.macos_managed { background: var(--b-macos); }
+.taken { background: var(--taken); }
+.purge { background: var(--purge); }
+.free { background: var(--track); }
+.sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.bar { display: block; height: 6px; background: linear-gradient(var(--line-strong), var(--line-strong)) 0 50% / 100% 1px no-repeat; }
+.bar i { display: block; height: 100%; min-width: 2px; border-radius: 0 3px 3px 0; box-shadow: 2px 0 0 var(--under, var(--paper)); }
+
+.top { display: flex; align-items: center; gap: 12px; padding: 0 32px; border-bottom: 1px solid var(--line); }
+.top h1 { font: 600 17px/1 var(--serif); letter-spacing: -.005em; }
+.top .status { color: var(--ink-2); font-size: 12px; }
+.progress { width: 120px; height: 4px; border-radius: 2px; background: var(--track); }
+.progress i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+
+.page { overflow: auto; min-height: 0; padding: 16px 32px 22px; }
+
+/* headline, meter, figures */
+.lead h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -.012em; }
+.lead .say { font: 400 14.5px/1.5 var(--serif); margin-top: 6px; max-width: 74ch; }
+.lead .say b { font-family: var(--sans); font-size: 13.5px; font-weight: 650; }
+.lead .say .sw { margin-right: 5px; vertical-align: 1px; }
+.lead .err { margin-top: 6px; }
+.meter { display: flex; gap: 2px; height: 6px; margin: 11px 0 8px; }
+.meter i { display: block; height: 100%; min-width: 3px; }
+.meter i:first-child { border-radius: 3px 0 0 3px; }
+.meter .free { border-radius: 0 3px 3px 0; flex: 1; }
+.figures { display: flex; gap: 22px; font-size: 12.5px; color: var(--ink-2); }
+.figures span { display: inline-flex; align-items: baseline; gap: 6px; }
+.figures i { width: 8px; height: 8px; border-radius: 2px; align-self: center; }
+.figures b { color: var(--ink); font-weight: 650; }
+.aside { margin-top: 7px; color: var(--ink-2); font-size: 12px; }
+
+/* the four totals: a filled track, since these four have a scale of their own */
+.four { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-top: 16px; }
+.four .rule { height: 4px; background: var(--track); border-radius: 2px; }
+.four .rule i { display: block; height: 100%; min-width: 3px; border-radius: 2px; }
+.four b { display: block; font-size: 20px; font-weight: 650; letter-spacing: -.015em; margin-top: 7px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.four b .unit { font-size: 13px; }
+.four b.wait { color: var(--ink-3); font-size: 15px; font-weight: 500; line-height: 23px; letter-spacing: 0; }
+.four .name { display: flex; align-items: baseline; gap: 6px; color: var(--ink-2); font-size: 12.5px; }
+.apart { margin-top: 7px; color: var(--ink-3); font-size: 12px; }
+
+.note { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; padding: 6px 11px; border-radius: 8px; background: var(--panel); font-size: 12.5px; line-height: 1.45; }
+.note svg { color: var(--caution); margin-top: 2px; }
+.note .link { margin-left: auto; padding-left: 12px; }
+
+.sec { margin-top: 18px; }
+.sec > header { display: flex; align-items: baseline; gap: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--line-strong); }
+.sec h3 { font: 600 17px/1.2 var(--serif); }
+.sec > header span { color: var(--ink-2); font-size: 12.5px; }
+.sec > header .scale { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.sec > header .link { margin-left: auto; }
+.sec > header .scale + .link { margin-left: 8px; }
+.sec.bad h3 { color: var(--danger); }
+
+.fold { display: grid; grid-template-columns: 28px minmax(0, 1fr); padding-top: 8px; }
+.fold.plain { grid-template-columns: minmax(0, 1fr); }
+.fold .names { line-height: 1.6; }
+.fold .names span { white-space: nowrap; margin-right: 14px; }
+.fold .names b { font-weight: 600; }
+.fold .names em, .fold .rest { font-style: normal; color: var(--ink-2); }
+.fold .after { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+
+.entry { display: grid; grid-template-columns: 28px minmax(0, 1fr) 246px; padding: 10px 0 11px; border-bottom: 1px solid var(--line); }
+.entry.plain { grid-template-columns: minmax(0, 1fr) 246px; }
+.entry > .text { padding-right: 24px; }
+.chk { padding-top: 3px; }
+.entry h4 { font: 600 16px/1.25 var(--serif); }
+.count { font: 500 12px/1 var(--sans); margin-left: 6px; display: inline-flex; align-items: center; gap: 2px; }
+.count svg { width: 11px; height: 11px; }
+.count[aria-expanded="true"] svg { transform: rotate(90deg); }
+.story { font: 400 14px/1.45 var(--serif); margin-top: 3px; max-width: 62ch; }
+.cost { margin-top: 4px; color: var(--ink-2); font-size: 12.5px; max-width: 70ch; }
+.cost .mono { color: var(--ink); }
+.entry .err { margin-top: 4px; }
+.entry.small { padding: 7px 0 8px; }
+.small .chk { padding-top: 2px; }
+.entry.small h4 { font: 600 13.5px/1.35 var(--sans); }
+.entry.small .story { font: 400 12.5px/1.45 var(--sans); color: var(--ink-2); margin-top: 1px; max-width: 70ch; }
+
+/* a finding's items */
+.items { grid-column: 2 / -1; margin-top: 8px; border-top: 1px solid var(--line); }
+.plain > .items { grid-column: 1 / -1; }
+.item { display: grid; grid-template-columns: 28px minmax(0, 1fr) 246px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.item.plain { grid-template-columns: minmax(0, 1fr) 246px; }
+.item:last-child { border-bottom: 0; padding-bottom: 0; }
+.item > .text { padding-right: 24px; overflow-wrap: anywhere; }
+.item .meta { display: block; color: var(--ink-2); font-size: 12px; }
+
+/* the size column */
+.side { display: grid; grid-template-columns: 148px 88px; column-gap: 10px; align-items: center; align-content: start; }
+.side b { grid-column: 2; text-align: right; font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.side b .unit { font-size: 12.5px; }
+.side .when { grid-column: 1 / -1; justify-self: end; text-align: right; color: var(--ink-2); font-size: 12px; margin-top: 1px; }
+.side .when.bad { color: var(--danger); }
+.side .when svg { color: var(--accent); vertical-align: -2px; margin-right: 5px; }
+.side .nosize { grid-column: 1 / -1; justify-self: end; display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--ink-2); }
+.small .side b, .item .side b { font-size: 13.5px; }
+
+/* the tray */
+.tray { display: flex; align-items: center; gap: 22px; padding: 0 32px; background: var(--panel); border-top: 1px solid var(--line-strong); }
+@media (max-width: 800px) { .tray { gap: 12px; } }
+.steps { display: flex; align-items: center; gap: 8px; list-style: none; font-size: 12.5px; color: var(--ink-2); }
+.steps li { display: flex; align-items: center; gap: 6px; }
+.steps li i { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); font-style: normal; font-size: 11px; font-weight: 600; }
+.steps li.on { color: var(--ink); font-weight: 650; }
+.steps li.on i { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.steps li.was i { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.steps li + li::before { content: ""; width: 16px; height: 1px; background: var(--line-strong); margin-right: 2px; }
+.tray .say { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+.tray .say b { display: block; color: var(--ink); font-weight: 650; }
+.pick { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; white-space: nowrap; }
+.say b .pick { margin: 0 0 0 12px; font-weight: 400; color: var(--ink-2); vertical-align: bottom; }
+.pick svg { color: var(--caution); }
+.btn { display: inline-flex; align-items: center; height: 34px; padding: 0 18px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 650; font-size: 13.5px; white-space: nowrap; }
+.btn.quiet { background: transparent; color: var(--accent); padding: 0 6px; }
+.btn.run { background: var(--danger); color: var(--on-danger); }
+.btn:disabled { background: var(--track); color: var(--ink-3); }
+
+/* the plan's list, and a run's marks on it */
+.act { display: grid; grid-template-columns: 44px minmax(0, 1fr) 246px; padding: 9px 0 10px; border-bottom: 1px solid var(--line); }
+.act > .text { padding-right: 24px; }
+.act .seq { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; }
+.act h4 { font: 600 15px/1.3 var(--serif); }
+.ln { display: block; margin-top: 3px; overflow-wrap: anywhere; }
+.ln[data-state] { padding-left: 20px; }
+.ln svg { float: left; margin: 2px 0 0 -20px; color: var(--ink-3); }
+.ln[data-state="done"] svg, .ln[data-state="running"] svg { color: var(--accent); }
+.ln[data-state="fail"] svg { color: var(--danger); }
+.ln .err { display: block; }
+.act .link { margin: 3px 0 0; font-family: var(--sans); }
+.ln .link { margin: 0 0 0 8px; }
+.act .sub { display: block; margin-top: 3px; color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
+.act .sub b { color: var(--ink); font-weight: 600; }
+.act .sub .mono { color: var(--ink); }
+.act .side { padding-top: 1px; }
+.act .side b { font-size: 14px; }
+.act.skip { grid-template-columns: 44px minmax(0, 1fr); }
+.act.skip > svg { color: var(--caution); margin-top: 3px; }
+.bad .act > svg { color: var(--danger); }
+.act.skip p { margin-top: 3px; color: var(--ink-2); font-size: 12.5px; }
+.act.skip .err { color: var(--danger); }
+.act.skip p .mono { color: var(--ink); }
+/* a row that arrived a moment ago, or the action that is running: after the rows, so its side padding wins */
+.fresh { --under: var(--accent-soft); background: var(--accent-soft); margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 8px; border-color: transparent; }
+.fold .fresh { margin: 0 8px 0 -6px; padding: 2px 6px; border-radius: 3px; }
+.undo { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.undo .mono { color: var(--ink); margin-left: 6px; }
+
+/* confirm */
+.ask { max-width: 560px; margin: 26px auto 0; }
+.ask h2 { font: 600 28px/1.15 var(--serif); margin-bottom: 16px; letter-spacing: -.015em; }
+.ask dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px 16px; padding: 16px 0; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
+.ask dt { font-size: 17px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ask dt .unit { font-size: 12.5px; }
+.ask dt .sw { margin-right: 8px; vertical-align: 2px; }
+.ask dd { font: 400 14.5px/1.45 var(--serif); }
+.ask dd b { font-weight: 600; }
+.gate { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; }
+.gate label { display: inline-flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 600; }
+.gate input { accent-color: var(--danger); }
+.fine { margin-top: 12px; color: var(--ink-2); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header class="top" id="top"></header>
+<main class="page" id="page"></main>
+<footer class="tray" id="tray"></footer>
+<script>
+'use strict';
+
+// The state. Engine events and clicks change it, render() draws it, and nothing else holds what the page shows.
+// The page has no rule about what may be deleted: a tick box exists where the engine sent a `select`, and what
+// a plan does is what the engine's plan says.
+const S = {
+  screen: 'findings', // findings | plan | confirm | running | result; an engine that is down is drawn over it
+  hello: null,        // the engine's hello
+  tick: null,         // the shell's latest tick: the forecast in the headline
+  env: '',            // why the login shell's environment could not be read
+  down: '',           // the message of an engine that exited
+  cut: null,          // a run the engine exited under: {id, done, of, moves}
+  error: null,        // an error event that no other state explains
+  opened: false,      // the Full Disk Access settings were opened from here
+  scan: null,         // see newScan
+  known: false,       // the first plan has said what starts ticked
+  ticked: new Set(),  // atoms, each one handed over in a finding's select
+  tray: null,         // what the ticked atoms come to: {totals, skipped}; null while the engine counts, false if it could not
+  planning: '',       // the id of the plan to review that is on its way: only its answer is drawn
+  plan: null,         // the plan under review, see newPlan
+  note: '',           // why the plan under review replaced another
+  automation: '',     // asking | allowed | denied: whether regrow may control Finder
+  read: false,        // the confirm step's tick box
+  run: null,          // {req, marks: seq → {state, error, method}, stopping, result, canceled, error}
+  safeOpen: false,    // "Safe to clear" shows each finding
+  open: new Set(),    // findings and plan groups opened to their lines
+};
+
+const newScan = () => ({ req: '', id: '', rules: 0, headroom: null, rows: [], totals: null, exclusive: null,
+  phase: 'scanning' /* scanning | done | canceled | stale */, why: '', stopping: false });
+
+function newRow(e) {
+  const rule = e.finding.rule, select = e.select || null;
+  const items = (e.finding.items || []).map((it, i) => {
+    const id = rule.id + '/' + it.key;
+    if (!home && it.path && String(it.key).startsWith('~/') && it.path.endsWith(it.key.slice(1))) {
+      const folder = it.path.slice(0, it.path.length - it.key.length + 1);
+      home = new RegExp('(^|[\\s"\'=(:])' + folder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=/|$)', 'g');
+    }
+    return { i, id, atom: select && select.includes(id) ? id : '', name: it.path || it.label || it.key || '',
+      path: !!it.path, bytes: it.bytes || 0, lower: !!it.partial, used: it.last_used ? time(it.last_used) : 0 };
+  });
+  // A select that is the rule's id alone ticks the row as a whole.
+  return { n: S.scan.rows.length, id: rule.id, rule, bucket: e.bucket, select, items, error: e.finding.error || '',
+    whole: !!select && select.length === 1 && select[0] === rule.id };
+}
+
+function newPlan(e) {
+  const actions = (e.plan.actions || []).map((a, i) => ({ ...a, seq: i + 1, atom: a.rule_id + (a.item_key ? '/' + a.item_key : '') }));
+  const groups = [];
+  for (const a of actions) {
+    let g = groups[groups.length - 1];
+    if (!g || g.rule !== a.rule_id) groups.push(g = { rule: a.rule_id, actions: [], bytes: 0 });
+    g.actions.push(a);
+    g.bytes += a.bytes || 0;
+  }
+  return { id: e.plan_id, expires: time(e.expires_at), actions, groups, skipped: e.plan.skipped || [], totals: e.totals,
+    commands: actions.filter((a) => a.kind !== 'trash').length, sent: false };
+}
+
+// ---------- the bridge: requests out, events in ----------
+
+const bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.regrow;
+const post = (message) => { if (bridge) bridge.postMessage(message); };
+
+// Requests not yet answered, by id, each with the scan it was made for. The shell routes an answer by its id
+// alone, so the ids of one load of the page must not be those of another.
+const asked = new Map(), load = Date.now().toString(36);
+let serial = 0;
+function ask(type, role, fields) {
+  const id = type[0] + load + '-' + ++serial;
+  asked.set(id, { role, scan: S.scan });
+  post({ type, id, ...fields });
+  return id;
+}
+
+const OUT_OF_DATE = { scan_spent: 1, scan_superseded: 1, scan_canceled: 1, unknown_scan: 1 };
+
+window.regrow = { receive(line) {
+  try {
+    const e = JSON.parse(line), from = asked.get(e.re);
+    if (e.event === 'done' || e.event === 'error') asked.delete(e.re);
+    // An answer about a scan that is no longer shown changes nothing; an error it has no word for is still shown.
+    if (from && from.scan !== S.scan && (e.event !== 'error' || OUT_OF_DATE[e.code])) return;
+    if (on[e.event]) on[e.event](e, from && from.scan === S.scan ? from.role : '');
+  } catch (err) {
+    S.error = { message: 'the page could not read a line from the app: ' + err.message };
+  }
+  render();
+} };
+
+const on = {
+  // Also sent when the engine starts again, always after engine_down: every id from before is dead. Without
+  // one between, it is the shell's answer to ready repeating the hello the page has, and starts no scan.
+  hello(e) { if (S.hello && !S.down) return; asked.clear(); S.down = ''; S.hello = e; scan(); },
+  tick(e) { S.tick = e; },
+  shell(e) {
+    if (e.state === 'environment') S.env = e.captured === false ? e.reason || 'no reason given' : '';
+    if (e.state === 'automation') S.automation = e.allowed ? 'allowed' : 'denied';
+    if (e.state !== 'engine_down') return;
+    if (S.run && !S.run.result) S.cut = { id: S.plan.id, done: S.plan.actions.filter((a) => stateOf(a).state === 'done').length, of: S.plan.actions.length, moves: S.plan.actions.length > S.plan.commands };
+    asked.clear();
+    counting = clearTimeout(counting);
+    S.down = e.message || 'no reason given';
+  },
+  headroom(e, role) { if (role === 'scan') S.scan.headroom = e; },
+  start(e, role) { if (role === 'scan') { S.scan.id = e.scan_id; S.scan.rules = e.rules; } },
+  finding(e, role) { if (role === 'scan') S.scan.rows.push(newRow(e)); },
+  summary(e, role) { if (role === 'scan') { S.scan.totals = e.totals; S.scan.exclusive = e.exclusive || {}; } },
+  plan(e, role) {
+    const figures = { totals: e.totals, skipped: e.plan.skipped || [] };
+    if (role === 'first') {
+      // The default selection names a rule read in full by its id, also where the row is ticked item by item.
+      const starts = e.select || [];
+      for (const row of S.scan.rows) for (const atom of row.select || []) if (starts.includes(atom) || starts.includes(row.id)) S.ticked.add(atom);
+      S.known = true;
+      S.tray = figures;
+    } else if (role === 'count') {
+      if (e.re === latest) S.tray = figures;
+    } else if (role === 'review' && e.re === S.planning) {
+      Object.assign(S, { tray: figures, plan: newPlan(e), planning: '', screen: 'plan', read: false, automation: '' });
+    }
+  },
+  journal(e, role) {
+    const j = e.entry;
+    if (role === 'run') S.run.marks[j.seq] = { state: j.event === 'start' ? 'running' : j.event, error: j.error || '', method: j.receipt ? j.receipt.method : '' };
+  },
+  done(e, role) {
+    if (role === 'scan') {
+      S.scan.phase = e.canceled ? 'canceled' : 'done';
+      if (!e.canceled) ask('plan', 'first', { scan_id: S.scan.id });
+    } else if (role === 'run') {
+      ended(e.result, e.canceled, '');
+    }
+  },
+  error(e, role) {
+    if (OUT_OF_DATE[e.code] && (role === 'first' || role === 'count' || role === 'review')) {
+      S.scan.phase = 'stale';
+      S.scan.why = e.message || '';
+      // A run and its result keep their plan: the scan was spent by that run.
+      if (S.screen !== 'running' && S.screen !== 'result') Object.assign(S, { screen: 'findings', planning: '', plan: null });
+    } else if (role === 'run' && e.result) {
+      ended(e.result, false, e.message || e.code);
+    } else if (role === 'run') {
+      // Nothing ran: back to the plan, with a fresh one. A plan that was too old needs no more words than that.
+      Object.assign(S, { screen: 'plan', run: null, error: e.code === 'plan_expired' || e.code === 'unknown_plan' ? null : e });
+      review('The plan you confirmed did not run, so this is a fresh one. Nothing has run.');
+    } else if (role !== 'review' || e.re === S.planning) {
+      // An error for a review the page has dropped is dropped with it.
+      if (role === 'scan') S.scan = null;
+      if (role === 'review') S.planning = '';
+      if (role === 'count') S.tray = false;
+      S.error = e;
+    }
+  },
+};
+
+function scan() {
+  counting = clearTimeout(counting);
+  Object.assign(S, { screen: 'findings', scan: newScan(), known: false, ticked: new Set(), tray: null, planning: '',
+    plan: null, note: '', run: null, error: null, safeOpen: false, open: new Set() });
+  S.scan.req = ask('scan', 'scan');
+}
+
+// A plan to review is always a fresh one, so the time it can run in starts when it is drawn.
+// A count still due is left to go out: a review that fails or is dropped does not fill the tray.
+function review(note) {
+  S.note = note;
+  S.planning = ask('plan', 'review', { scan_id: S.scan.id, select: [...S.ticked] });
+}
+
+function ended(result, canceled, error) {
+  Object.assign(S.run, { result: result || {}, canceled: !!canceled, error });
+  S.screen = 'result';
+}
+
+// Each change of a tick box is one plan request, sent once the clicking pauses; its answer fills the tray.
+// `counting` is the timer of a change not yet sent, `latest` the request whose answer counts.
+let counting, latest = '';
+function toggle(el) {
+  if (!canTick()) return;
+  const row = S.scan.rows[el.dataset.tick];
+  const atoms = el.dataset.tick === 'safe' ? S.scan.rows.filter((r) => r.rule.risk === 'safe' && !r.error).flatMap((r) => r.select || [])
+    : el.dataset.item ? [row.items[el.dataset.item].atom] : row.select;
+  const all = atoms.every((a) => S.ticked.has(a));
+  for (const a of atoms) if (all) S.ticked.delete(a); else if (a) S.ticked.add(a);
+  S.tray = null;
+  clearTimeout(counting);
+  counting = setTimeout(() => {
+    counting = 0;
+    latest = ask('plan', 'count', { scan_id: S.scan.id, select: [...S.ticked] });
+    render();
+  }, 200);
+}
+const canTick = () => !S.down && S.screen === 'findings' && !!S.scan && S.scan.phase === 'done' && S.known && !S.planning;
+
+const expired = (p) => !(Date.now() <= p.expires);
+function within(p) {
+  const minutes = Math.ceil((p.expires - Date.now()) / 6e4);
+  return minutes > 1 ? 'in the next ' + minutes + ' minutes' : 'in the next minute';
+}
+// Whether the plan's Trash moves know where they will land.
+const settled = (p) => p.commands === p.actions.length || S.automation === 'allowed' || S.automation === 'denied';
+
+// What a click does. Each checks the state for itself: a button being enabled is drawing, not permission.
+const act = {
+  scan() { if (S.hello && !S.down && S.screen !== 'running' && !(S.scan && S.scan.phase === 'scanning')) { S.cut = null; scan(); } },
+  stop() {
+    const sc = S.scan;
+    if (S.down || !sc || sc.phase !== 'scanning' || sc.stopping) return;
+    sc.stopping = true;
+    ask('cancel', 'cancel', { target: sc.req });
+  },
+  fold() { S.safeOpen = !S.safeOpen; },
+  open(el) { const key = el.dataset.key; if (!S.open.delete(key)) S.open.add(key); },
+  review() { if (canTick() && S.ticked.size) review(''); },
+  again() { if (!S.down && S.screen === 'plan' && !S.planning) review(''); },
+  back() {
+    if (S.screen === 'confirm') S.screen = 'plan';
+    else if (S.screen === 'plan') Object.assign(S, { screen: 'findings', plan: null, planning: '', note: '' });
+  },
+  confirm() {
+    const p = S.plan;
+    if (S.down || S.screen !== 'plan' || S.planning || !p.actions.length || p.sent || expired(p)) return;
+    Object.assign(S, { screen: 'confirm', read: false, automation: '' });
+    // Asked before the run, so macOS puts its question while no Trash move is waiting on the answer.
+    if (!settled(p)) { S.automation = 'asking'; post({ shell: 'automation' }); }
+  },
+  run() {
+    const p = S.plan;
+    if (S.down || S.screen !== 'confirm' || !S.read || p.sent || !settled(p)) return;
+    if (expired(p)) { S.screen = 'plan'; return; }
+    p.sent = true;
+    S.cut = null;
+    S.run = { req: ask('execute', 'run', { plan_id: p.id }), marks: {}, stopping: false, result: null, canceled: false, error: '' };
+    S.screen = 'running';
+  },
+  halt() {
+    if (S.down || S.screen !== 'running' || S.run.stopping) return;
+    S.run.stopping = true;
+    ask('cancel', 'cancel', { target: S.run.req });
+  },
+  fda() { if (S.hello && S.hello.fda === 'denied') { S.opened = true; post({ shell: 'open-full-disk-access' }); } },
+  relaunch() { if (S.opened) post({ shell: 'relaunch' }); },
+};
+
+// ---------- words and figures ----------
+
+const BUCKET = { // a total's label, and what a row says about when its space comes back
+  frees_now: ['frees now, as commands run', 'frees now'],
+  after_trash: ['free after you empty the Trash', 'after the Trash is emptied'],
+  shown_only: ['shown only, never deleted', 'shown only'],
+  macos_managed: ['macOS reclaims it by itself', 'macOS reclaims it by itself'],
+};
+const NO_FORECAST = {
+  short_history: 'No forecast of when it fills yet: that takes three samples over three hours since free space last jumped up.',
+  not_falling: 'No forecast of when it fills: free space is steady or rising.',
+};
+const FIRST = { // what a pre-action does before its action
+  'docker-volume-export': 'a tarball of the volume goes to regrow staging',
+  'agent-scratch-recheck': 'the session is checked again',
+  'worktree-recheck': 'the worktree is checked again',
+};
+const STATE = (state) => ({ fail: 'failed', unrun: 'not run' }[state] || state);
+// What an unreadable row needs, as far as the engine's hello tells.
+const needs = () => (S.hello && S.hello.fda === 'denied' ? 'needs Full Disk Access' : 'could not be read');
+
+const num = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+
+// engine.HumanBytes. Go rounds a tie to the even digit, where toFixed rounds it up.
+function human(n) {
+  if (n < 1024) return n + ' B';
+  let div = 1024, exp = 0;
+  for (let m = Math.floor(n / 1024); m >= 1024; m = Math.floor(m / 1024)) { div *= 1024; exp++; }
+  const floor = Math.floor(n * 10 / div), twice = (n * 10 - floor * div) * 2;
+  const tenths = twice > div || (twice === div && floor % 2) ? floor + 1 : floor;
+  return Math.floor(tenths / 10) + '.' + tenths % 10 + ' ' + 'KMGTPE'[exp] + 'iB';
+}
+
+// An RFC 3339 time as milliseconds. The engine writes any number of fraction digits; Date reads three.
+const time = (s) => Date.parse(String(s).replace(/\.(\d+)/, (all, f) => '.' + (f + '00').slice(0, 3)));
+
+// Ages are counted from the scan's own sample: they say how things stood when it looked.
+function ago(t) {
+  const at = S.scan && S.scan.headroom ? time(S.scan.headroom.at) : Date.now();
+  const days = Math.floor((at - t) / 864e5);
+  return days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 60 ? days + ' days ago' : Math.round(days / 30) + ' months ago';
+}
+
+// The home folder, as a pattern for where a path starts. It is learned from an item whose key is its path
+// under ~: the page has no path of its own.
+let home = null;
+const tilde = (s) => (home ? String(s).replace(home, '$1~') : String(s));
+
+// tui.ShellJoin
+const shellJoin = (argv) => [].concat(argv || []).map((a) => (/[ \t"'*?[]/.test(a) ? JSON.stringify(a) : a)).join(' ');
+// One word as a shell reads it back, quoted as the engine's shellQuote quotes it.
+const shellWord = (s) => (/[ \t\n'"\\$`*?[\](){}<>|&;!#]/.test(s) ? "'" + s.replace(/'/g, "'\\''") + "'" : s);
+// How regrow is started in Terminal, as the engine names itself: an app's engine goes by its path.
+const cli = () => shellWord((S.hello && S.hello.self) || 'regrow');
+
+const titleOf = (id) => { const row = S.scan.rows.find((r) => r.id === id); return row ? row.rule.title : id; };
+
+// What became of an action: the journal says while the plan runs, and the result says what never started.
+function stateOf(a) {
+  const run = S.run, mark = run.marks[a.seq];
+  if (mark && !(run.result && mark.state === 'running')) return mark;
+  if (!run.result) return { state: 'waiting' };
+  // A skip is a line "<atom>: <reason>" of the result.
+  const skip = (run.result.skipped || []).find((s) => s.startsWith(a.atom + ': '));
+  return skip ? { state: 'skipped', error: skip.slice(a.atom.length + 2) } : { state: 'unrun' };
+}
+
+// A finding as it is drawn: its own bytes come from the summary once there is one.
+function measure(row) {
+  const own = S.scan.exclusive || {};
+  const items = row.items.map((it) => ({ ...it, own: own[it.id] != null ? own[it.id] : it.bytes, blind: it.lower && !it.bytes }))
+    .sort((a, b) => b.own - a.own);
+  const sum = (f) => items.reduce((n, it) => n + f(it), 0);
+  return { row, items, own: sum((it) => it.own), bytes: sum((it) => it.bytes), lower: items.some((it) => it.lower),
+    blind: items.length > 0 && items.every((it) => it.blind), used: Math.max(0, ...items.map((it) => it.used)),
+    picked: (row.select || []).filter((a) => S.ticked.has(a)).length };
+}
+
+// ---------- markup ----------
+
+// Markup is built with h`…`. Every value set into it is escaped, unless it is markup that h made.
+class Markup { constructor(s) { this.s = s; } }
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';');
+const show = (v) => (v instanceof Markup ? v.s : Array.isArray(v) ? v.map(show).join('') : v == null || v === false ? '' : esc(v));
+const h = (parts, ...values) => new Markup(parts.reduce((out, part, i) => out + show(values[i - 1]) + part));
+
+const svg = (shapes) => new Markup('<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + shapes + '</svg>');
+const ICON = {
+  lock: svg('<rect x="3.2" y="7" width="9.6" height="6.6" rx="1.6"/><path d="M5.4 7V5.2a2.6 2.6 0 015.2 0V7"/>'),
+  caution: svg('<path d="M8 2.2l6 10.6H2z"/><path d="M8 6.4v3M8 11.2v.1"/>'),
+  undo: svg('<path d="M5.6 3.4L2.6 6.4l3 3"/><path d="M3 6.4h6.2a3.6 3.6 0 010 7.2H6.4"/>'),
+  open: svg('<path d="M6 3.8L10.2 8 6 12.2"/>'),
+  done: svg('<path d="M3.2 8.6l3 3 6.4-7"/>'),
+  fail: svg('<path d="M4 4l8 8M12 4l-8 8"/>'),
+  skipped: svg('<path d="M4 8h8"/>'),
+  waiting: svg('<circle cx="8" cy="8" r="4.8"/>'),
+  running: svg('<circle cx="8" cy="8" r="3.2" fill="currentColor"/>'),
+};
+
+// A size: the figure and its unit set apart.
+function size(n, lower) {
+  const [figure, unit] = human(n).split(' ');
+  return h`<span class="num">${lower ? '≥ ' : ''}${figure}</span><span class="unit"> ${unit}</span>`;
+}
+// A command or path may wrap at a space or after a slash, never inside a name.
+const unbroken = (s) => new Markup(String(s).split(' ').map((word) => word.split('/').map((name) => (name ? '<span class="nb">' + esc(name) + '</span>' : '')).join('/<wbr>')).join(' '));
+// A sentence of the engine's, with what it quotes in backticks set in mono.
+const sentence = (s) => new Markup(String(s).split('`').map((part, i) => (i % 2 ? '<span class="mono">' + unbroken(part).s + '</span>' : esc(part))).join(''));
+
+function bar(bytes, bucket, scale) {
+  return h`<span class="bar" aria-hidden="true">${bytes > 0 ? h`<i class="${bucket}" style="width:${Math.min(100, bytes / scale * 100).toFixed(2)}%"></i>` : ''}</span>`;
+}
+
+// The disk as it stands, or as it will once `now` bytes are freed and `trash` bytes wait in the Trash. Its
+// figures stand under it in words.
+function meter(hr, now, trash) {
+  const pct = (n) => (Math.max(0, n) / hr.total * 100).toFixed(2) + '%';
+  const taken = Math.max(0, hr.total - hr.free - hr.purgeable - now - trash);
+  return h`<div class="meter" aria-hidden="true"><i class="taken" style="width:${pct(taken)}"></i>${trash ? h`<i class="after_trash" style="width:${pct(trash)}"></i>` : ''}
+<i class="purge" style="width:${pct(hr.purgeable)}"></i>${now ? h`<i class="frees_now" style="width:${pct(now)}"></i>` : ''}<i class="free"></i></div>`;
+}
+
+// The size column of a finding or of one of its items.
+function side(v, bucket, scale, brief) {
+  if (v.blind) {
+    return h`<div class="side"><span class="nosize">${ICON.lock}unreadable</span>${brief ? '' : h`<span class="when">${needs()}</span>`}</div>`;
+  }
+  return h`<div class="side">${bar(v.own, bucket, scale)}<b>${size(v.own, v.lower)}</b>
+    ${v.own !== v.bytes ? h`<span class="when">of ${v.lower ? '≥ ' : ''}${human(v.bytes)} in the folder; the rest is in other rows</span>` : ''}
+    ${brief ? '' : h`<span class="when">${(BUCKET[bucket] || [])[1]}</span>`}${!brief && v.used ? h`<span class="when">last used ${ago(v.used)}</span>` : ''}</div>`;
+}
+
+// A section: its title, a count in words, what stands at the right of its header, and its rows.
+const section = (title, count, right, rows, bad) => h`<section class="sec ${bad ? 'bad' : ''}"><header><h3>${title}</h3><span>${count}</span>${right}</header>${rows}</section>`;
+
+function notices(all) {
+  const rows = [];
+  if (S.error) {
+    rows.push(h`<div class="note">${ICON.caution}<span>regrow's engine answered with an error: <span class="err mono">${S.error.message || S.error.code}</span></span></div>`);
+  }
+  if (S.cut) {
+    // Only what was reported reached the page, and the engine journals an action before it reports it and
+    // skips moves it never journals, so the note says nothing it would have to guess from the marks.
+    const c = S.cut;
+    rows.push(h`<div class="note">${ICON.caution}<span>The engine stopped during the run, after reporting ${c.done} of ${num(c.of, 'action')} done.${c.moves ? h` If it moved anything, <span class="mono">${cli()} undo ${c.id}</span> puts it back; an item it was moving as it stopped may be in the Trash or in regrow staging, and undo does not know of it.` : ''}</span></div>`);
+  }
+  if (all && S.env) {
+    rows.push(h`<div class="note">${ICON.caution}<span>regrow could not read your login shell's environment, so tools outside the system folders are not found: <span class="mono">${S.env}</span></span></div>`);
+  }
+  if (all && S.hello && S.hello.fda === 'denied') {
+    const part = S.scan.rows.filter((r) => r.items.some((it) => it.lower)).length;
+    rows.push(h`<div class="note">${ICON.lock}<span>Full Disk Access is off${part ? `, so ${num(part, 'finding')} ${part === 1 ? 'was' : 'were'} read only in part` : ''}. A size marked ≥ is a lower bound.</span>
+      <button class="link" data-do="${S.opened ? 'relaunch' : 'fda'}">${S.opened ? 'Relaunch regrow to apply' : 'Open Full Disk Access settings'}</button></div>`);
+  }
+  return rows;
+}
+
+// ---------- the screens ----------
+
+function drawFindings() {
+  const sc = S.scan;
+  if (!sc) return h`<section class="lead"><h2>${S.hello ? 'No scan to show.' : 'Waiting for regrow.'}</h2></section>${notices(false)}`;
+  const scanning = sc.phase === 'scanning', so = scanning ? ' so far' : '';
+  const views = sc.rows.map(measure).sort((a, b) => b.own - a.own);
+  const failed = views.filter((v) => v.row.error), found = views.filter((v) => !v.row.error && v.items.length);
+  const drawn = sc.rows.filter((r) => r.error || r.items.length);
+  const fresh = new Set(scanning ? drawn.slice(-2) : []);
+  const scale = Math.max(1, ...found.map((v) => v.own));
+  // Said once, by the first section that draws a bar.
+  let told = false;
+  const tell = (list) => {
+    if (told || !list.some((v) => !v.blind && v.own > 0)) return '';
+    told = true;
+    return h`<span class="scale">A full bar is ${human(scale)}, the largest finding${so}</span>`;
+  };
+  const risk = (r) => found.filter((v) => (r ? v.row.rule.risk === r : v.row.rule.risk !== 'safe' && v.row.rule.risk !== 'caution'));
+  const safe = risk('safe'), call = risk('caution'), shown = risk('');
+  const draw = (v, small) => entry(v, scale, fresh.has(v.row), small);
+  const atoms = safe.flatMap((v) => v.row.select || []), picked = atoms.filter((a) => S.ticked.has(a)).length;
+  const ticks = !S.known || !atoms.length ? '' : picked === atoms.length ? ', all ticked' : ', ' + (picked ? safe.filter((v) => v.picked).length : 'none') + ' ticked';
+
+  return h`${lead()}${four()}${notices(true)}
+    ${failed.length ? section('Not scanned', `${num(failed.length, 'rule')} ended with an error and ${failed.length === 1 ? 'is' : 'are'} in no total`, '', failed.map((v) => draw(v)), true) : ''}
+    ${safe.length ? section('Safe to clear', num(safe.length, 'finding') + so + ticks, h`${S.safeOpen ? tell(safe) : ''}<button class="link" data-do="fold">${S.safeOpen ? 'Fold into one line' : 'Show each one'}</button>`,
+      S.safeOpen ? safe.map((v) => draw(v, true)) : fold(safe, atoms, picked, fresh)) : ''}
+    ${call.length ? section('Your call', `${num(call.length, 'finding')}${so} that cost${call.length === 1 ? 's' : ''} something to bring back`, tell(call), call.map((v) => draw(v))) : ''}
+    ${shown.length ? section('Only shown', `${num(shown.length, 'finding')}${so} regrow never deletes`, tell(shown), shown.map((v) => draw(v))) : ''}`;
+}
+
+function lead() {
+  const hr = S.scan.headroom, t = S.tick, days = t ? t.days_to_full : null;
+  if (!hr) return h`<section class="lead"><h2>Reading this disk.</h2></section>`;
+  const forecast = days != null;
+  const why = forecast ? '' : !t ? 'No forecast of when it fills yet: regrow has not sampled free space since it started.'
+    : t.history_unreadable ? 'No forecast of when it fills: the history of free space could not be read.'
+    : NO_FORECAST[t.no_forecast] || 'No forecast of when it fills.';
+  return h`<section class="lead"><h2>${forecast ? `At the recent pace, this disk is full in ${days < 1 ? 'under a day' : 'about ' + num(Math.round(days), 'day')}.` : `${human(hr.free)} free of ${human(hr.total)}.`}</h2>
+    ${meter(hr, 0, 0)}
+    <div class="figures">${forecast ? h`<span><i class="free"></i><b>${human(hr.free)}</b> free of ${human(hr.total)}</span>` : h`<span><i class="taken"></i><b>${human(hr.total - hr.free - hr.purgeable)}</b> taken</span>`}
+      <span><i class="purge"></i><b>${human(hr.purgeable)}</b> purgeable, macOS frees it when needed</span><span><b>${human(hr.swap_used)}</b> swap in use</span></div>
+    ${why ? h`<p class="aside">${why}</p>` : ''}</section>`;
+}
+
+function four() {
+  const t = S.scan.totals, stopped = S.scan.phase === 'canceled', names = Object.keys(BUCKET);
+  const max = t ? Math.max(1, ...names.map((b) => t[b] || 0)) : 1;
+  return h`<section class="four">${names.map((b) => h`<div class="t" data-bucket="${b}">
+      <div class="rule">${t ? h`<i class="${b}" style="width:${((t[b] || 0) / max * 100).toFixed(1)}%"></i>` : ''}</div>
+      ${t ? h`<b>${size(t[b] || 0)}</b>` : h`<b class="wait">${stopped ? 'not counted' : 'pending'}</b>`}<span class="name"><i class="sw ${b}"></i>${BUCKET[b][0]}</span></div>`)}</section>
+    <p class="apart">${t ? 'Four totals, never added up: each comes back at a different time, or not at all.' : stopped ? 'The four totals are counted when a scan runs to its end.' : 'The four totals arrive when the scan ends.'}</p>`;
+}
+
+// "Safe to clear" as one line: the six largest by name, the rest counted.
+function fold(safe, atoms, picked, fresh) {
+  const figure = (v) => (v.blind ? 'unreadable' : (v.lower ? '≥ ' : '') + human(v.own));
+  const rest = safe.length - 6;
+  return h`<div class="fold ${atoms.length ? '' : 'plain'}">${atoms.length ? h`<span class="chk"><input type="checkbox" id="tsafe" data-tick="safe" aria-label="All safe findings" ${picked === atoms.length ? 'checked' : picked ? 'data-some' : ''} ${canTick() ? '' : 'disabled'}></span>` : ''}
+    <div><div class="names">${safe.slice(0, 6).map((v) => h`<span class="${fresh.has(v.row) ? 'fresh' : ''}" data-rule="${v.row.id}"><b>${v.row.rule.title}</b> <em>${figure(v)}</em></span> `)}${rest > 0 ? h`<span class="rest" data-more="${rest}">and ${rest} smaller ${rest === 1 ? 'one' : 'ones'}</span>` : ''}</div>
+      <div class="after">All of it regrows on its own as you work.</div></div></div>`;
+}
+
+// One finding. `small` is the compact row of an opened "Safe to clear".
+function entry(v, scale, fresh, small) {
+  const row = v.row, rule = row.rule, regen = rule.regen || {};
+  if (row.error) {
+    return h`<div class="entry plain" data-rule="${row.id}"><div class="text"><h4>${rule.title}</h4><p class="err mono">${row.error}</p></div><div class="side"><span class="when">not scanned</span></div></div>`;
+  }
+  const open = S.open.has('r' + row.n), each = !!row.select && !row.whole;
+  const kept = rule.risk !== 'safe' && rule.risk !== 'caution';
+  const runs = row.bucket === 'after_trash' ? 'Goes to the Trash; regrow undo restores it.'
+    : row.bucket !== 'frees_now' ? '' : rule.native_command ? h`Runs <span class="mono">${unbroken(shellJoin(rule.native_command))}</span>, no undo.` : 'A command frees it, with no undo.';
+  const count = v.items.length > 1 ? h`<button class="link count" data-do="open" data-key="r${row.n}" id="o${row.n}" aria-expanded="${String(open)}">${ICON.open}${each ? v.picked + ' of ' : ''}${num(v.items.length, v.items[0].path ? 'folder' : 'item')}</button>` : '';
+  return h`<div class="entry ${row.select ? '' : 'plain'} ${small ? 'small' : ''} ${fresh ? 'fresh' : ''}" data-rule="${row.id}">
+    ${row.select ? h`<span class="chk"><input type="checkbox" id="t${row.n}" data-tick="${row.n}" aria-label="Add ${rule.title} to the plan" ${v.picked === row.select.length ? 'checked' : v.picked ? 'data-some' : ''} ${canTick() ? '' : 'disabled'}></span>` : ''}
+    <div class="text"><h4>${rule.title}${count}</h4>
+      ${small ? h`<p class="story">${regen.story}${v.used ? ` Last used ${ago(v.used)}.` : ''}</p>`
+        : h`<p class="story">${regen.story}</p><p class="cost">${kept ? rule.note : h`Costs: ${regen.cost}. ${runs}`}</p>`}</div>
+    ${side(v, row.bucket, scale, small)}
+    ${open ? h`<div class="items">${v.items.map((it) => item(row, it, each, scale))}</div>` : ''}</div>`;
+}
+
+// One item of an opened finding. It has a tick box only where the engine named its atom.
+function item(row, it, each, scale) {
+  return h`<div class="item ${each ? '' : 'plain'}" data-id="${it.id}">
+    ${each ? h`<span class="chk">${it.atom ? h`<input type="checkbox" id="t${row.n}-${it.i}" data-tick="${row.n}" data-item="${it.i}" aria-label="Add ${it.name} to the plan" ${S.ticked.has(it.atom) ? 'checked' : ''} ${canTick() ? '' : 'disabled'}>` : ''}</span>` : ''}
+    <div class="text">${it.path ? h`<span class="mono" title="${it.name}">${unbroken(tilde(it.name))}</span>` : it.name}
+      <span class="meta">${it.blind ? needs() : it.used ? 'last used ' + ago(it.used) : 'last use not known'}</span></div>
+    ${side(it, row.bucket, scale, true)}</div>`;
+}
+
+function drawPlan() {
+  const p = S.plan, hr = S.scan.headroom, t = p.totals, cmds = p.commands, moves = p.actions.length - cmds;
+  return h`<section class="lead"><h2>${p.actions.length ? `The plan: ${num(p.actions.length, 'action')}, nothing has run yet.` : 'The plan: nothing to run.'}</h2>
+      ${S.note ? h`<p class="aside">${S.note}</p>` : ''}
+      <p class="say">${cmds ? h`<i class="sw frees_now"></i><b>${human(t.frees_now)}</b> comes back as ${num(cmds, 'command')} ${cmds === 1 ? 'runs; it has' : 'run; they have'} no undo. ` : ''}${moves ? h`<i class="sw after_trash"></i><b>${human(t.after_trash)}</b> goes to the Trash in ${num(moves, 'move')} and is free once you empty it; until then regrow undo restores it.` : ''}</p>
+      ${hr ? h`${meter(hr, t.frees_now, t.after_trash)}<div class="figures"><span><b>${human(hr.free + t.frees_now)}</b> free once the commands end, up from ${human(hr.free)} now</span></div>` : ''}</section>
+    ${notices(false)}
+    ${p.skipped.length ? section('Skipped', `${p.skipped.length} ticked ${p.skipped.length === 1 ? 'finding' : 'findings'} the plan cannot run`, '',
+      p.skipped.map((s) => h`<div class="act skip">${ICON.caution}<div><h4>${titleOf(s.rule_id)}</h4>${s.item_key ? h`<span class="ln mono">${unbroken(tilde(s.item_key))}</span>` : ''}<p>${sentence(s.reason)}</p></div></div>`)) : ''}
+    ${p.actions.length ? section('In the order they run', `${num(cmds, 'command')} and ${num(moves, 'move')} to the Trash`, tellActions(p), actions('plan')) : ''}`;
+}
+
+// An action as it is read: the path a move takes, or the command; the home folder as ~.
+const told = (a) => unbroken(tilde(a.kind === 'trash' && a.path ? a.path : shellJoin(a.command)));
+const tellActions = (p) => h`<span class="scale">A full bar is ${human(Math.max(1, ...p.groups.map((g) => g.bytes)))}, the largest action</span>`;
+
+// The plan's actions in the engine's order, grouped by rule. On the plan a group shows its first line and
+// opens to the rest; during a run and after it every line is shown, marked with what became of it.
+function actions(mode) {
+  const p = S.plan, scale = Math.max(1, ...p.groups.map((g) => g.bytes));
+  return p.groups.map((g, gi) => {
+    const first = g.actions[0], many = g.actions.length > 1, trash = first.kind === 'trash';
+    const open = mode !== 'plan' || S.open.has('g' + gi);
+    const states = mode === 'plan' ? [] : g.actions.map(stateOf), kinds = [...new Set(states.map((s) => s.state))];
+    const tally = kinds.length === 1 ? STATE(kinds[0])
+      : ['done', 'fail', 'skipped', 'running'].filter((k) => kinds.includes(k)).map((k) => (k === 'running' ? k : states.filter((s) => s.state === k).length + ' ' + STATE(k))).join(', ');
+    const more = many && mode === 'plan' ? h`<button class="link" data-do="open" data-key="g${gi}" id="g${gi}" aria-expanded="${String(open)}">${open ? 'Show only the first' : `and ${g.actions.length - 1} more like it`}</button>` : '';
+    const line = (a) => {
+      const st = states[a.seq - first.seq];
+      return h`<span class="ln mono" ${st ? h`data-state="${st.state}"` : ''}>${st ? ICON[st.state] || ICON.skipped : ''}<span title="${shellJoin(a.command)}">${told(a)}</span>${open ? '' : more}${st && st.error && mode === 'running' ? h`<span class="err">${st.error}</span>` : ''}</span>`;
+    };
+    return h`<div class="act ${kinds.includes('running') ? 'fresh' : ''}" data-rule="${g.rule}"><span class="seq">${many ? first.seq + '–' + (first.seq + g.actions.length - 1) : first.seq}</span>
+      <div class="text"><h4>${titleOf(g.rule)}</h4>${(open ? g.actions : [first]).map(line)}${open ? more : ''}
+        ${first.pre_action ? h`<span class="sub">First, ${FIRST[first.pre_action] || h`the check <span class="mono">${first.pre_action}</span> runs`}.</span>` : ''}
+        ${g.actions.flatMap((a) => a.includes || []).map((x) => h`<span class="sub"><b>Also removes</b> <span class="mono">${unbroken(tilde(x.id))}</span> (${human(x.bytes)})</span>`)}
+        ${[...new Set(states.filter((s) => s.state === 'skipped').map((s) => s.error))].map((why) => h`<span class="sub"><b>Skipped:</b> ${sentence(why)}</span>`)}</div>
+      <div class="side">${bar(g.bytes, trash ? 'after_trash' : 'frees_now', scale)}<b>${size(g.bytes)}</b>
+        ${mode !== 'plan' ? h`<span class="when ${kinds.includes('fail') ? 'bad' : ''}">${tally}</span>` : trash ? h`<span class="when">${ICON.undo}undo restores</span>` : h`<span class="when">no undo</span>`}</div></div>`;
+  });
+}
+
+function drawConfirm() {
+  const p = S.plan, t = p.totals, cmds = p.commands, moves = p.actions.length - cmds, run = `Run ${num(p.actions.length, 'action')}`;
+  const names = [...new Set(p.skipped.map((s) => titleOf(s.rule_id)))];
+  const trash = S.automation === 'asking' ? h`<b>${num(moves, 'move')} to the Trash.</b> Asking macOS whether regrow may control Finder, which makes the moves; the button stays locked until it answers.`
+    : S.automation === 'denied' ? h`<b>${num(moves, 'move')} to regrow staging.</b> regrow may not control Finder, so the moves land in regrow staging: regrow undo restores them, and emptying the Trash does not free them.`
+    : h`<b>${num(moves, 'move')} to the Trash.</b> Free once you empty it; until then regrow undo puts them back.`;
+  return h`<section class="ask"><h2>${run}?</h2><dl>
+      ${cmds ? h`<dt><i class="sw frees_now"></i>${size(t.frees_now)}</dt><dd><b>${num(cmds, 'command')} with no undo.</b> The space is free as ${cmds === 1 ? 'it runs, and what it deletes' : 'they run, and what they delete'} comes back only by regrowing.${p.actions.some((a) => a.empties_trash) ? `${cmds === 1 ? ' It' : ' One of them'} empties the Trash: what is in it now is gone for good.` : ''}</dd>` : ''}
+      ${moves ? h`<dt><i class="sw after_trash"></i>${size(t.after_trash)}</dt><dd>${trash}</dd>` : ''}
+      ${names.length ? h`<dt><i class="sw"></i>${p.skipped.length} skipped</dt><dd>Left as ${names.length === 1 ? 'it is' : 'they are'}: ${names.join(', ')}. The plan says why.</dd>` : ''}</dl>
+    <div class="gate"><label><input type="checkbox" id="read" ${S.read ? 'checked' : ''}><span>${cmds ? `I read the ${num(cmds, 'command')}. ${cmds === 1 ? 'It has' : 'They have'} no undo.` : 'I read the plan. Every action in it is a move that regrow undo puts back.'}</span></label>
+      <button class="btn run" id="go" data-do="run" ${S.read && settled(p) ? '' : 'disabled'}>${run}</button></div>
+    <p class="fine">Return does nothing here. The plan can run once, ${within(p)}.</p></section>`;
+}
+
+function drawRunning() {
+  const p = S.plan, states = p.actions.map(stateOf), failed = states.filter((s) => s.state === 'fail').length;
+  return h`<section class="lead"><h2>${S.run.stopping ? 'Stopping after this action' : 'Running the plan'}: ${states.filter((s) => s.state === 'done').length} of ${num(p.actions.length, 'action')} done${failed ? `, ${failed} failed` : ''}.</h2></section>
+    ${notices(false)}${section('In the order they run', 'each line is marked as it starts and as it ends', tellActions(p), actions('running'))}`;
+}
+
+function drawResult() {
+  const p = S.plan, run = S.run, r = run.result, states = p.actions.map((a) => [a, stateOf(a)]);
+  const failed = states.filter(([, s]) => s.state === 'fail'), skipped = states.filter(([, s]) => s.state === 'skipped').length;
+  const trash = r.trash_bytes || 0, staged = r.staged_bytes || 0, freed = Math.max(0, (r.bytes || 0) - trash - staged);
+  const moved = trash || staged || states.some(([, s]) => s.method === 'finder' || s.method === 'staging');
+  return h`<section class="lead"><h2>${run.canceled ? 'Stopped' : 'The run has ended'}: ${r.done || 0} of ${num(p.actions.length, 'action')} done${r.failed ? `, ${r.failed} failed` : ''}${skipped ? `, ${skipped} skipped` : ''}.</h2>
+      ${run.error ? h`<p class="err mono">${run.error}</p>` : ''}
+      <p class="say">${freed ? h`<i class="sw frees_now"></i><b>${human(freed)}</b> is free now. ` : ''}${trash ? h`<i class="sw after_trash"></i><b>${human(trash)}</b> is in the Trash, and is free once you empty it. ` : ''}${staged ? h`<b>${human(staged)}</b> is in regrow staging, because Finder could not take it: emptying the Trash does not free that.` : ''}${freed || trash || staged ? '' : 'No space was freed.'}</p>
+      ${moved ? h`<p class="undo">To put back what went to the Trash${staged ? ' and to staging' : ''}:<span class="mono">${cli()} undo ${r.run_id || p.id}</span></p>` : ''}</section>
+    ${notices(false)}
+    ${failed.length ? section('Failed', `${num(failed.length, 'action')} ended with an error`, '',
+      failed.map(([a, s]) => h`<div class="act skip">${ICON.fail}<div><h4>${titleOf(a.rule_id)}</h4><span class="ln mono">${told(a)}</span><p class="err mono">${s.error}</p></div></div>`), true) : ''}
+    ${section('In the order they ran', 'what became of each action', tellActions(p), actions('result'))}`;
+}
+
+function drawDown() {
+  return h`<section class="lead"><h2>regrow's engine has stopped.</h2><p class="err mono">${S.down}</p>
+    <p class="aside">This page scans again as soon as the engine is back.</p></section>${notices(false)}`;
+}
+
+const progress = (part, stop, stopping, label) => h`<span class="progress"><i style="width:${(part * 100).toFixed(1)}%"></i></span><button class="link" data-do="${stop}" ${stopping ? 'disabled' : ''}>${stopping ? 'Stopping' : label}</button>`;
+
+function drawTop() {
+  const sc = S.scan;
+  let status = '', right = '';
+  if (S.down) {
+    status = 'the engine has stopped';
+  } else if (S.screen === 'running') {
+    const ended = S.plan.actions.filter((a) => ['done', 'fail'].includes(stateOf(a).state)).length;
+    status = `${ended} of ${num(S.plan.actions.length, 'action')} have ended`;
+    right = progress(ended / S.plan.actions.length, 'halt', S.run.stopping, 'Stop after this action');
+  } else if (S.screen === 'findings' && sc && sc.phase === 'scanning') {
+    status = sc.rules ? `${sc.rows.length} of ${num(sc.rules, 'rule')} have reported` : 'starting the scan';
+    right = progress(sc.rules ? sc.rows.length / sc.rules : 0, 'stop', sc.stopping, 'Stop');
+  } else if (S.screen === 'findings') {
+    const failed = sc ? sc.rows.filter((r) => r.error).length : 0;
+    status = !sc ? '' : sc.phase === 'canceled' ? `stopped after ${sc.rows.length} of ${num(sc.rules, 'rule')}`
+      : `${num(sc.rules, 'rule')} scanned` + (failed ? `, ${failed} ended with an error` : '') + (sc.phase === 'stale' ? ', now out of date' : '');
+    right = S.hello ? h`<button class="link" data-do="scan">Scan again</button>` : '';
+  }
+  return h`<h1>regrow</h1><span class="status">${status}</span><span class="grow"></span>${right}`;
+}
+
+function drawTray() {
+  const sc = S.scan, p = S.plan, step = { findings: 0, plan: 1, confirm: 2 }[S.screen];
+  const again = h`<button class="btn" data-do="scan">Scan again</button>`;
+  let say = '', buttons = '';
+  if (S.down) {
+    say = 'Waiting for the engine to come back.';
+  } else if (S.screen === 'plan') {
+    const old = expired(p) || p.sent;
+    say = S.planning ? 'Making a fresh plan.' : old ? 'This plan is too old to run. Nothing has run.' : !p.actions.length ? 'Nothing in this plan can run.' : `Nothing has run yet. The plan can run once, ${within(p)}.`;
+    buttons = h`<button class="btn quiet" data-do="back">Back</button>${old || S.planning ? h`<button class="btn" data-do="again" ${S.planning ? 'disabled' : ''}>Plan again</button>` : h`<button class="btn" data-do="confirm" id="next" ${p.actions.length ? '' : 'disabled'}>Run plan…</button>`}`;
+  } else if (S.screen === 'confirm') {
+    say = 'Nothing runs until you tick the box.';
+    buttons = h`<button class="btn quiet" data-do="back">Back to the plan</button>`;
+  } else if (S.screen === 'running') {
+    say = S.run.stopping ? 'Stopping once the action that is running ends.' : 'The plan is running. An action that has started runs to its end.';
+  } else if (S.screen === 'result') {
+    say = 'This scan is spent. Scan again to see the disk as it is now.';
+    buttons = again;
+  } else if (!sc || sc.phase === 'scanning' || !S.known && sc.phase === 'done') {
+    say = sc && sc.phase === 'done' ? 'Working out what starts ticked.' : 'Findings arrive as each rule reports. The plan opens when the scan ends.';
+    buttons = h`<button class="btn" disabled>Review plan</button>`;
+  } else if (sc.phase !== 'done') {
+    say = sc.phase === 'stale' ? h`<b>This scan is out of date.</b>${sc.why}` : 'The scan was stopped before its end, so there is no plan.';
+    buttons = again;
+  } else {
+    const t = S.tray;
+    say = h`<b>${num(sc.rows.filter((r) => (r.select || []).some((a) => S.ticked.has(a))).length, 'finding')} ticked${t && t.skipped.length ? h`<span class="pick">${ICON.caution}${t.skipped.length} skipped</span>` : ''}</b>${!t ? (t === null ? 'counting what that frees' : '') : h`
+      <span class="pick"><i class="sw frees_now"></i>${human(t.totals.frees_now)} frees now</span><span class="pick"><i class="sw after_trash"></i>${human(t.totals.after_trash)} after the Trash is emptied</span>`}`;
+    buttons = h`<button class="btn" data-do="review" id="next" ${S.planning || !S.ticked.size ? 'disabled' : ''}>${S.planning ? 'Planning' : 'Review plan'}</button>`;
+  }
+  return h`<ol class="steps">${['Findings', 'Plan', 'Confirm'].map((name, i) => h`<li class="${i === step ? 'on' : step == null || i < step ? 'was' : ''}"><i>${i + 1}</i>${name}</li>`)}</ol>
+    <span class="say">${say}</span><span class="grow"></span>${buttons}`;
+}
+
+// ---------- drawing and wiring ----------
+
+const SCREENS = { findings: drawFindings, plan: drawPlan, confirm: drawConfirm, running: drawRunning, result: drawResult, down: drawDown };
+const root = document.documentElement, $ = (id) => document.getElementById(id);
+let clockDrawn = '', renders = 0;
+
+function render() {
+  const page = $('page'), screen = S.down ? 'down' : S.screen, at = page.scrollTop;
+  const had = document.activeElement || {}, focus = had.id ? '#' + had.id : had.dataset && had.dataset.do ? '[data-do="' + had.dataset.do + '"]' : '';
+  $('top').innerHTML = show(drawTop());
+  page.innerHTML = show(SCREENS[screen]());
+  $('tray').innerHTML = show(drawTray());
+  for (const box of page.querySelectorAll('[data-some]')) box.indeterminate = true;
+  // A scrollbar that takes room takes it from the side padding, so the rows keep their width.
+  page.style.paddingRight = 32 - (page.offsetWidth - page.clientWidth) + 'px';
+  page.scrollTop = root.dataset.screen === screen ? at : 0;
+  if (focus && document.querySelector(focus)) document.querySelector(focus).focus();
+  if (screen === 'running' && page.querySelector('.fresh')) page.querySelector('.fresh').scrollIntoView({ block: 'nearest' });
+  clockDrawn = clock();
+  root.dataset.screen = screen;
+  root.dataset.scan = S.scan ? S.scan.phase : '';
+  // Tells whoever drives the page that this state is on screen, and that the page has nothing left to send
+  // by itself: it is empty while a tick-box change waits to go out.
+  root.dataset.settled = counting ? '' : ++renders;
+}
+
+// What the page says about the plan's time left; the page is drawn again only when that changes.
+const clock = () => (!S.plan || S.down || (S.screen !== 'plan' && S.screen !== 'confirm') ? '' : expired(S.plan) ? 'old' : within(S.plan));
+setInterval(() => {
+  if (clock() === 'old' && S.screen === 'confirm') S.screen = 'plan';
+  if (clock() !== clockDrawn) render();
+}, 1000);
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-do]');
+  if (!el || !act[el.dataset.do]) return;
+  act[el.dataset.do](el);
+  render();
+});
+document.addEventListener('change', (e) => {
+  if (e.target.dataset.tick) toggle(e.target);
+  else if (e.target.id === 'read' && S.screen === 'confirm') S.read = e.target.checked;
+  render();
+});
+// Return never runs the plan: on the confirm step it does nothing at all.
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && S.screen === 'confirm') e.preventDefault(); }, true);
+
+render();
+post({ shell: 'ready' });
+</script>
+</body>
+</html>

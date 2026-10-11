@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"maps"
 	"testing"
 )
@@ -65,6 +66,55 @@ func TestAccountTotalsAcrossActionableRules(t *testing.T) {
 	want := Totals{FreesNow: 79, AfterTrash: 30, ShownOnly: 5, MacOSManaged: 3, Partial: 1}
 	if got := Account(findings).Totals; got != want {
 		t.Fatalf("totals = %+v, want %+v", got, want)
+	}
+}
+
+// A rule's bucket is the Totals field its bytes land in, under that
+// field's JSON name: a peer reads one from the other.
+func TestBucketNamesTheTotalARuleCountsIn(t *testing.T) {
+	tests := []struct {
+		rule Rule
+		want string
+	}{
+		{nativeRule("steward"), BucketFreesNow},
+		{Rule{ID: "pruned", Risk: RiskSafe, Prune: &Prune{}}, BucketFreesNow},
+		{trashRule("trashed"), BucketAfterTrash},
+		{Rule{ID: "shown", Risk: RiskSurfaceOnly}, BucketShownOnly},
+		{Rule{ID: "phantom", Category: CategoryPhantomSpace, Risk: RiskCaution, NativeCommand: Argv{"tmutil", "delete"}}, BucketMacOSManaged},
+		{Rule{ID: "phantom-shown", Category: CategoryPhantomSpace, Risk: RiskSurfaceOnly}, BucketMacOSManaged},
+	}
+	seen := map[string]bool{}
+	for _, tt := range tests {
+		if got := Bucket(tt.rule); got != tt.want {
+			t.Errorf("Bucket(%s) = %q, want %q", tt.rule.ID, got, tt.want)
+		}
+		seen[tt.want] = true
+
+		var totals Totals
+		totals.add(tt.rule, 7)
+		raw, err := json.Marshal(totals)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]int64
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		for name, n := range fields {
+			var want int64
+			if name == tt.want {
+				want = 7
+			}
+			if n != want {
+				t.Errorf("%s: totals field %s = %d, want %d: the bytes land in the rule's bucket alone", tt.rule.ID, name, n, want)
+			}
+		}
+		if _, ok := fields[tt.want]; !ok {
+			t.Errorf("%s: Totals has no JSON field %q", tt.rule.ID, tt.want)
+		}
+	}
+	if len(seen) != 4 {
+		t.Fatalf("the table walks %d buckets, want all four", len(seen))
 	}
 }
 

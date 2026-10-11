@@ -29,14 +29,18 @@ type event struct {
 	Protocol  int              `json:"protocol"`
 	Version   string           `json:"version"`
 	FDA       FDA              `json:"fda"`
+	Self      string           `json:"self"`
 	ScanID    string           `json:"scan_id"`
 	Rules     int              `json:"rules"`
 	Index     int              `json:"index"`
 	TookMS    int64            `json:"took_ms"`
+	Bucket    string           `json:"bucket"`
+	Select    []string         `json:"select"`
 	Finding   *engine.Finding  `json:"finding"`
 	Totals    *engine.Totals   `json:"totals"`
 	Exclusive map[string]int64 `json:"exclusive"`
 	PlanID    string           `json:"plan_id"`
+	ExpiresAt time.Time        `json:"expires_at"`
 	Plan      *engine.Plan     `json:"plan"`
 	Entry     *oplog.Entry     `json:"entry"`
 	Result    *executor.Result `json:"result"`

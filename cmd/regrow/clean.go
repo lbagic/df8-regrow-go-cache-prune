@@ -125,7 +125,7 @@ func newRunExecutor(host engine.Host, runID string, stream func(context.Context,
 	if err != nil {
 		return nil, nil, err
 	}
-	stagingDir := filepath.Join(filepath.Dir(logPath), "staging", runID)
+	stagingDir := filepath.Join(stagingRoot(logPath), runID)
 	exec := &executor.Executor{
 		Trash: &trash.Mover{Home: host.Home, StagingDir: stagingDir},
 		Log:   log,
@@ -146,6 +146,12 @@ func newRunExecutor(host engine.Host, runID string, stream func(context.Context,
 	// Journal entries fsync per Append (invariant 6); nothing left to
 	// lose at close.
 	return exec, func() { _ = log.Close() }, nil
+}
+
+// stagingRoot is the directory beside the oplog that holds every run's
+// staging directory.
+func stagingRoot(logPath string) string {
+	return filepath.Join(filepath.Dir(logPath), "staging")
 }
 
 // nothingToClean explains an empty plan: refusals and skips are why a

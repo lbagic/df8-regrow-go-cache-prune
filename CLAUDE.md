@@ -10,4 +10,4 @@ Docs: `docs/PRODUCT.md` (what/why), `docs/PLAN.md` (build order + Status tracker
 - Safety invariants in ARCHITECTURE.md are non-negotiable: dry-run default, trash-not-rm, path guards, oplog before action, surface-only never deletable.
 - Cleaning targets are YAML rules in `rules/` — prefer adding/editing rules over adding code. Every rule gets a golden test against a fixture $HOME.
 - Record notable decisions in the "Decisions log" section of `docs/ARCHITECTURE.md`, dated.
-- The app's scan page follows `DESIGN.md`: one HTML file, no build, no framework, no network at runtime; check every change by a screenshot in light and dark.
+- The app's scan page, `app/Resources/page.html`, follows `DESIGN.md`: one HTML file, no build, no framework, no network at runtime; check every change by a screenshot in light and dark (`just page-check`).
