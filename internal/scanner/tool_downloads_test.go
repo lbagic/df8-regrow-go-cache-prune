@@ -177,14 +177,15 @@ func TestDownloadedInstallers(t *testing.T) {
 	f.app("/Applications/Utilities/Tool.app", "com.example.tool", "1.0", after)
 	f.app("~/Applications/Foo.app", "com.example.foo", "1.2.0", before)
 	f.app("/Applications/Bar.app", "com.example.bar", "1.0", after)
-	f.app("/Applications/Baz.app", "com.example.baz", "1.0", before)
 	f.app("/Applications/Auto.app", "com.example.auto", "4.1", after)
 	f.app("/Applications/Affinity Photo.app", "com.example.photo", "1.0", after)
 	f.app("/Applications/MyApp.app", "com.example.myapp", "1.0", after)
+	f.app("/Applications/Beta.app", "com.example.beta", "1.4-beta", after)
+	f.app("/Applications/Plain.app", "com.example.plain", "", after)
 
 	for _, name := range []string{"Docker.dmg", "Slack-4.41.105-macOS.dmg", "Slack-4.42.0-macOS.dmg", "ChatGPTInstaller.dmg", "Tool (1).DMG", "Figma.pkg",
 		"Minecraft.dmg", "1.0-arm64.dmg", "Recent.dmg", "NoDate.dmg", "notes.txt", "corrupt.zip",
-		"Auto.4.2.dmg", "Auto-4.1.dmg", "Affinity Photo 2.dmg"} {
+		"Auto.4.2.dmg", "Auto-4.1.dmg", "Affinity Photo 2.dmg", "Beta-9.0.dmg", "Plain-9.0.dmg"} {
 		f.file(name)
 	}
 	recent := f.now.Add(-24 * time.Hour)
@@ -199,11 +200,11 @@ func TestDownloadedInstallers(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A zip is matched by the app it holds, whatever its name; its
-	// version, when comparable, decides over the times.
+	// version decides over the times, and one that cannot be compared
+	// keeps it.
 	f.zipFile("foo-same.zip", appZip("Foo.app", "com.example.foo", "1.2"))
 	f.zipFile("foo-next.zip", appZip("Foo.app", "COM.EXAMPLE.FOO", "1.3.0"))
 	f.zipFile("bar-beta.zip", appZip("Bar.app", "com.example.bar", "1.0 beta"))
-	f.zipFile("baz-beta.zip", appZip("Baz.app", "com.example.baz", "1.0 beta"))
 	f.zipFile("photos.zip", map[string]string{"a.jpg": "jpeg", "Docker.app.txt": "text"})
 	two := appZip("One.app", "com.example.one", "1.0")
 	for k, v := range appZip("Two.app", "com.example.two", "1.0") {
@@ -224,7 +225,6 @@ func TestDownloadedInstallers(t *testing.T) {
 		"ChatGPTInstaller.dmg":     "ChatGPTInstaller.dmg · ChatGPT.app",
 		"Tool (1).DMG":             "Tool (1).DMG · Tool.app",
 		"foo-same.zip":             "foo-same.zip · Foo.app",
-		"bar-beta.zip":             "bar-beta.zip · Bar.app",
 		"Auto-4.1.dmg":             "Auto-4.1.dmg · Auto.app",
 	}
 	if !reflect.DeepEqual(offered, wantOffered) {
@@ -240,7 +240,9 @@ func TestDownloadedInstallers(t *testing.T) {
 		"NoDate.dmg":             "when " + filepath.Join(apps, "NoDate.app") + " was installed cannot be read",
 		"corrupt.zip":            "it cannot be read as a zip archive",
 		"foo-next.zip":           "its app is newer than " + f.host.ExpandPath("~/Applications/Foo.app") + " (1.3.0 over 1.2.0)",
-		"baz-beta.zip":           "it arrived after " + filepath.Join(apps, "Baz.app") + " was installed",
+		"bar-beta.zip":           "its app's version cannot be compared with that of " + filepath.Join(apps, "Bar.app"),
+		"Beta-9.0.dmg":           "the version of " + filepath.Join(apps, "Beta.app") + ` ("1.4-beta") cannot be compared with 9.0`,
+		"Plain-9.0.dmg":          "the version of " + filepath.Join(apps, "Plain.app") + ` ("") cannot be compared with 9.0`,
 		"photos.zip":             "it holds no app at its top level",
 		"two.zip":                "it holds more than one app",
 		"other.zip":              "no installed app is com.example.other",
@@ -368,6 +370,15 @@ func TestDownloadedInstallersKeepAllWhenAppsCannotBeListed(t *testing.T) {
 	offered, kept := f.scan()
 	if len(offered) != 0 || kept["Docker.dmg"] != "the installed apps could not all be listed" {
 		t.Fatalf("offered %v, kept %v; want every download kept", offered, kept)
+	}
+	// Listing needs read, a stat needs search: the folder lists, its
+	// app cannot be stat'd.
+	if err := os.Chmod(locked, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	offered, kept = f.scan()
+	if len(offered) != 0 || kept["Docker.dmg"] != "the installed apps could not all be listed" {
+		t.Fatalf("offered %v, kept %v; want every download kept while an app one folder down cannot be stat'd", offered, kept)
 	}
 }
 

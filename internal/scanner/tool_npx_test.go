@@ -122,6 +122,23 @@ func TestNpxCacheUnreadableFolderIsARow(t *testing.T) {
 	}
 }
 
+func TestNpxCacheKeepsAFolderNotAllRead(t *testing.T) {
+	n, _ := npxFixture(t, "aaa", "bbb")
+	locked := filepath.Join(n.dir, "aaa", "node_modules")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	items, kept, err := n.scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantKept := []keptNpx{{filepath.Join(n.dir, "aaa"), "it cannot all be read, so when npx last ran it is unknown"}}
+	if len(items) != 1 || items[0].Path != filepath.Join(n.dir, "bbb") || !reflect.DeepEqual(kept, wantKept) {
+		t.Fatalf("items %+v, kept %+v; want bbb offered and aaa kept", items, kept)
+	}
+}
+
 func TestNpxRecheck(t *testing.T) {
 	n, home := npxFixture(t, "aaa", "bbb")
 	aaa, bbb := filepath.Join(n.dir, "aaa"), filepath.Join(n.dir, "bbb")

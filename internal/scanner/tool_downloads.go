@@ -33,9 +33,9 @@ import (
 //     architectures and platform words, spells an installed app's;
 //   - it is not newer than the installed app: a zip's app version is
 //     not higher than the installed one's, nor is a version a .dmg or
-//     .pkg spells in its name, and a download whose version is unknown,
-//     or not comparable, arrived before the installed app was put in
-//     place (the bundle's date added);
+//     .pkg spells in its name, and a version that cannot be compared
+//     keeps it; a .dmg or .pkg also arrived before the installed app
+//     was put in place (the bundle's date added);
 //   - nothing about it changed for downloadsQuiet.
 //
 // Each installed copy of the app must pass, an installed app whose
@@ -275,23 +275,31 @@ func (d *downloadedInstallers) judgeOne(ctx context.Context, path string, apps [
 	}
 
 	for _, a := range matched {
+		if zipped != nil {
+			newer, known := false, false
+			ai := d.appInfo(ctx, a, infos)
+			if ai != nil {
+				newer, known = zipped.newerThan(*ai)
+			}
+			switch {
+			case !known:
+				return engine.Item{}, fmt.Sprintf("its app's version cannot be compared with that of %s", a.path), true
+			case newer:
+				return engine.Item{}, fmt.Sprintf("its app is newer than %s (%s over %s)", a.path, zipped.version, ai.version), true
+			}
+			continue
+		}
 		if named != "" {
 			ai := d.appInfo(ctx, a, infos)
 			if ai == nil {
 				return engine.Item{}, fmt.Sprintf("the Info.plist of %s cannot be read, so its version cannot be compared with %s", a.path, named), true
 			}
-			if c, ok := compareAppVersion(named, ai.version); ok && c > 0 {
+			c, ok := compareAppVersion(named, ai.version)
+			switch {
+			case !ok:
+				return engine.Item{}, fmt.Sprintf("the version of %s (%q) cannot be compared with %s", a.path, ai.version, named), true
+			case c > 0:
 				return engine.Item{}, fmt.Sprintf("its name's version is newer than %s (%s over %s)", a.path, named, ai.version), true
-			}
-		}
-		if zipped != nil {
-			if ai := d.appInfo(ctx, a, infos); ai != nil {
-				if newer, known := zipped.newerThan(*ai); known {
-					if newer {
-						return engine.Item{}, fmt.Sprintf("its app is newer than %s (%s over %s)", a.path, zipped.version, ai.version), true
-					}
-					continue
-				}
 			}
 		}
 		if a.added.IsZero() {
