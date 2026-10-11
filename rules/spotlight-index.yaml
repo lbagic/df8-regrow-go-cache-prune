@@ -1,0 +1,22 @@
+# Bloated Spotlight index — Sequoia bug grew corespotlightd to 100GB+
+# (233GB observed, docs/research/02 §1, §10). mdutil -E erases and
+# rebuilds; the size shown is the user-visible CoreSpotlight index.
+id: spotlight-index
+title: Rebuild Spotlight index
+category: macos
+risk: caution
+paths:
+  darwin:
+    - ~/Library/Metadata/CoreSpotlight
+native_command: mdutil -E /
+note: Spotlight search is unavailable and CPU is busy while it reindexes — can take hours on big disks.
+regen:
+  story: mdutil erases the index and macOS rebuilds it automatically.
+  cost: hours of background indexing; search degraded meanwhile
+sudo: true
+doctor:
+  flag_above: 20GB
+  story: Sequoia bug grows the Spotlight index without bound on node_modules-heavy disks — 233GB observed. Normal indexes run 1–10GB.
+fixture:
+  files:
+    - ~/Library/Metadata/CoreSpotlight/index.spotlightV3/store

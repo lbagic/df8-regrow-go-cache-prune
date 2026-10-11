@@ -1,0 +1,2 @@
+[native] sim-devices: xcrun simctl delete AAA-111
+[native] sim-devices: xcrun simctl delete CCC-333

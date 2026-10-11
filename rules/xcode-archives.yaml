@@ -1,0 +1,21 @@
+# Released builds + dSYMs. 5–30GB (docs/research/02 §6). Caution:
+# local dSYMs symbolicate crash reports of shipped builds. Per-archive
+# items via glob (Prompt G0 refit): Xcode lays archives out as
+# Archives/<date>/<name>.xcarchive; each archive is one row, one trash
+# action. Emptied date directories are left behind — cosmetic.
+id: xcode-archives
+title: Xcode Archives (released builds + dSYMs)
+category: xcode
+risk: caution
+paths:
+  darwin:
+    - ~/Library/Developer/Xcode/Archives/*/*.xcarchive
+note: dSYMs here symbolicate crashes of shipped builds — fine to delete only if uploaded to App Store Connect or archived elsewhere.
+regen:
+  story: Not regenerable — each archive is a build artifact of a past release.
+  cost: symbolication of old crash reports lost unless dSYMs live elsewhere
+sudo: false
+fixture:
+  files:
+    - ~/Library/Developer/Xcode/Archives/2026-07-01/App 1.0.xcarchive/Info.plist
+    - ~/Library/Developer/Xcode/Archives/2026-07-13/App 1.1.xcarchive/Info.plist

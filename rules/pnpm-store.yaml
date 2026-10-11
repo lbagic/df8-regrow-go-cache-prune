@@ -1,0 +1,22 @@
+# pnpm content-addressed store. 10–20GB (docs/research/02 §2).
+# `store prune` removes only packages no project references — the
+# steward knows, we don't.
+id: pnpm-store
+title: pnpm store (unreferenced packages)
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/Library/pnpm/store
+    - ~/.pnpm-store
+  linux:
+    - ~/.local/share/pnpm/store
+    - ~/.pnpm-store
+native_command: pnpm store prune
+regen:
+  story: Only unreferenced packages are pruned; anything needed re-downloads.
+  cost: re-download if an old project resurfaces; network
+sudo: false
+fixture:
+  files:
+    - ~/Library/pnpm/store/v3/files/blob

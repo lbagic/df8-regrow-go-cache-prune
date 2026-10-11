@@ -1,0 +1,2 @@
+[trash] claude-code-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.claude/debug") as alias)
+[trash] claude-code-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.claude/shell-snapshots") as alias)

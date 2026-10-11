@@ -1,0 +1,1 @@
+[native] trash-empty: osascript -e tell application "Finder" to empty trash

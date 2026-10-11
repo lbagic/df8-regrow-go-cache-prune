@@ -1,0 +1,2 @@
+[trash] agent-scratch: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "/private/tmp/claude-1000/-Users-dev-proj/11111111-1111-4111-8111-111111111111") as alias)  (pre: agent-scratch-recheck)
+[trash] agent-scratch: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "/private/tmp/claude-1000/-Users-dev-other/22222222-2222-4222-8222-222222222222") as alias)  (pre: agent-scratch-recheck)

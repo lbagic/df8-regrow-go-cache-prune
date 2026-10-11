@@ -1,0 +1,25 @@
+# Every volume regrow deliberately keeps back, with the reason in the
+# row: referenced by a container (protected), on the config keep-list,
+# bigger than the export cap, or anonymous but recently used. Surface
+# -only so the space is visible without being one keystroke from gone.
+id: docker-volumes-kept
+title: Docker volumes (kept)
+category: docker
+risk: surface-only
+tool_query: docker-volumes-kept
+note: Each row says why it is kept. Protect more volumes via the keep-list (name glob or compose project) in ~/.config/regrow/config.yaml.
+regen:
+  story: n/a — regrow never deletes these; remove a keep reason (stop the container, edit the keep-list) and rescan to reclassify.
+  cost: n/a
+sudo: false
+fixture:
+  items:
+    - label: dune_chroma_data — project dune — in use by dune-chroma-1
+      arg: dune_chroma_data
+      bytes: 12000000
+    - label: prod_backups — keep-list
+      arg: prod_backups
+      bytes: 4000000000
+    - label: hugevol — bigger than the 10 GiB export cap, delete manually
+      arg: hugevol
+      bytes: 20000000000

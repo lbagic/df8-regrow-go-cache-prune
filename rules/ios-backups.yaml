@@ -1,0 +1,17 @@
+# Local iPhone/iPad backups — 5–50GB each and possibly the only copy
+# of a device's data. Never deletable through regrow
+# (docs/research/02 §1: surface-only).
+id: ios-backups
+title: Local iOS device backups
+category: macos
+risk: surface-only
+paths:
+  darwin:
+    - ~/Library/Application Support/MobileSync/Backup
+regen:
+  story: Delete via Finder ▸ (device) ▸ Manage Backups, where you can see what each backup is.
+  cost: n/a — a backup may be the only copy of a device
+sudo: false
+fixture:
+  files:
+    - ~/Library/Application Support/MobileSync/Backup/UDID/Manifest.db

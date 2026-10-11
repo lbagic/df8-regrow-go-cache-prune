@@ -1,0 +1,20 @@
+# APFS purgeable space — the gap between what Finder says is free
+# (purgeable-inclusive) and what df/statfs report. macOS reclaims it
+# on demand: old local snapshots, offloaded files, caches the system
+# has promised it can drop. Surface-only: there is no direct "delete
+# purgeable" — deleting TM snapshots (see tm-snapshots) converts most
+# of it, and macOS frees the rest under disk pressure.
+id: apfs-purgeable
+title: APFS purgeable space
+category: phantom-space
+risk: surface-only
+tool_query: apfs-purgeable
+note: Why Finder still shows full — Finder counts purgeable as free, df does not. macOS frees it automatically when the disk fills; deleting TM snapshots converts the biggest chunk immediately.
+regen:
+  story: Nothing to regenerate — macOS frees purgeable space on its own under pressure.
+  cost: n/a — regrow only explains this number
+sudo: false
+fixture:
+  items:
+    - label: purgeable on /System/Volumes/Data
+      bytes: 27000000000

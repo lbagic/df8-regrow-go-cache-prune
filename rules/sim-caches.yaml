@@ -1,0 +1,15 @@
+# CoreSimulator dyld caches. 0.5–3GB (docs/research/02 §6).
+id: sim-caches
+title: CoreSimulator caches
+category: xcode
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Developer/CoreSimulator/Caches
+regen:
+  story: Simulator runtime caches rebuild as simulators boot.
+  cost: first simulator boot slower; no network
+sudo: false
+fixture:
+  files:
+    - ~/Library/Developer/CoreSimulator/Caches/dyld/blob

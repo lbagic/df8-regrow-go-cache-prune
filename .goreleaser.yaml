@@ -1,0 +1,71 @@
+# Release pipeline: tag v* → GitHub release with signed checksums and
+# a brew formula pushed to lbagic/homebrew-tap. Run locally with
+# `goreleaser release --snapshot --clean` to verify without publishing.
+version: 2
+
+project_name: regrow
+
+builds:
+  - main: ./cmd/regrow
+    binary: regrow
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - arm64
+      - amd64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+# Keyless cosign signature over the checksum file: anyone can verify
+# the release against the GitHub Actions OIDC identity, no Apple
+# certificate needed for a CLI installed via brew.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    certificate: "${artifact}.pem"
+    output: true
+    args:
+      - sign-blob
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+
+homebrew_casks:
+  - repository:
+      owner: lbagic
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/lbagic/regrow
+    description: "Disk cleaner that knows what everything is and how it regenerates"
+    license: MIT
+    # The binary is not Apple-notarized (CLI via brew, no dev cert):
+    # strip the quarantine bit so Gatekeeper doesn't block it.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/regrow"]
+          end
+
+changelog:
+  use: github
+  filters:
+    exclude:
+      - "^docs"
+      - "^test"
+      - "^chore"
+
+release:
+  footer: |
+    Every action is dry-run by default, moves to Trash (never rm), is
+    journaled before it runs, and is restorable with `regrow undo`.

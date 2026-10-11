@@ -1,0 +1,25 @@
+# LM Studio downloaded models, one row per model dir. Both dir
+# generations are listed — the app moved its home between releases
+# (docs/research/02 §14) — whichever exists matches. LM Studio rescans
+# its models dir on launch, so trashing a model dir is clean.
+id: lm-studio-models
+title: LM Studio models
+category: ai
+risk: caution
+paths:
+  darwin:
+    - ~/.lmstudio/models/*/*
+    - ~/.cache/lm-studio/models/*/*
+  linux:
+    - ~/.lmstudio/models/*/*
+    - ~/.cache/lm-studio/models/*/*
+note: Only the default models location is scanned — if you moved it in LM Studio's settings, manage models in-app.
+regen:
+  story: Re-download any model from LM Studio's in-app catalog.
+  cost: re-download GBs; network
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/.lmstudio/models/lmstudio-community/Meta-Llama-3-8B-GGUF/model.gguf
+    - ~/.cache/lm-studio/models/TheBloke/Mistral-7B-GGUF/model.gguf

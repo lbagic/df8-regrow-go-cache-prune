@@ -1,0 +1,9 @@
+# binaries
+/regrow
+/dist/
+
+# OS noise
+.DS_Store
+
+# local-only notes (not part of the public repo)
+Mac Storage Cleanup notes.md

@@ -1,0 +1,1 @@
+[trash] xcode-derived-data: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Developer/Xcode/DerivedData") as alias)

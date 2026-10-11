@@ -1,0 +1,20 @@
+# torch.hub checkpoint cache (docs/research/02 §9) — pretrained
+# weights downloaded by torch.hub.load / torchvision. Re-fetched
+# automatically on next use.
+id: torch-hub-cache
+title: PyTorch hub cache
+category: ai
+risk: safe
+paths:
+  darwin:
+    - ~/.cache/torch/hub
+  linux:
+    - ~/.cache/torch/hub
+regen:
+  story: torch.hub re-downloads checkpoints on next load.
+  cost: re-download; network
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/.cache/torch/hub/checkpoints/resnet50.pth

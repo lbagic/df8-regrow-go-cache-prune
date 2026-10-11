@@ -1,0 +1,17 @@
+# Aggregate ~/Library/Caches report. Blanket deletion breaks
+# misbehaving apps and native per-app stewards don't exist, so
+# surface-only for now; per-app itemization is a planned extension.
+id: library-caches
+title: App caches (~/Library/Caches)
+category: macos
+risk: surface-only
+paths:
+  darwin:
+    - ~/Library/Caches
+regen:
+  story: Review per app — well-behaved apps rebuild caches, badly-behaved ones break.
+  cost: n/a — regrow reports the total, deletion stays manual
+sudo: false
+fixture:
+  files:
+    - ~/Library/Caches/com.example.someapp/Cache.db

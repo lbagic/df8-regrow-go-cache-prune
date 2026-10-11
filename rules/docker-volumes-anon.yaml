@@ -1,0 +1,21 @@
+# Anonymous volumes (docker-created, 64-hex names) that no container
+# references and that were last used — per the usage ledger — more
+# than 30 days ago. The honest default candidate among volumes; still
+# caution because volume contents are data, not cache.
+id: docker-volumes-anon
+title: Docker stale anonymous volumes
+category: docker
+risk: caution
+tool_query: docker-volumes-anon
+native_command: docker volume rm {arg}
+pre_action: docker-volume-export
+note: Anonymous volumes appear when a container runs without a named mount. Unreferenced and untouched for 30+ days; each is exported to a tarball in regrow staging before removal.
+regen:
+  story: Not regenerable — the pre-delete tarball in regrow staging is the recovery copy (docker volume create, then untar).
+  cost: data is gone for good once staging is cleared
+sudo: false
+fixture:
+  items:
+    - label: 333333333333 (anonymous)
+      arg: 3333333333333333333333333333333333333333333333333333333333333333
+      bytes: 965000000

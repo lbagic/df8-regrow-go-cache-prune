@@ -1,0 +1,2 @@
+[trash] lm-studio-models: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.lmstudio/models/lmstudio-community/Meta-Llama-3-8B-GGUF") as alias)
+[trash] lm-studio-models: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.cache/lm-studio/models/TheBloke/Mistral-7B-GGUF") as alias)

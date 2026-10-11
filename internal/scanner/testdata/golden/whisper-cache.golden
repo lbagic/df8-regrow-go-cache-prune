@@ -1,0 +1,1 @@
+[trash] whisper-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.cache/whisper") as alias)

@@ -1,0 +1,1 @@
+[trash] gpt4all-models: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Application Support/nomic.ai/GPT4All/Meta-Llama-3-8B-Instruct.Q4_0.gguf") as alias)

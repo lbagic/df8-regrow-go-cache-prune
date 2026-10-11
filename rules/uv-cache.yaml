@@ -1,0 +1,20 @@
+# uv cache — XDG path even on macOS (docs/research/02 §4b, §14).
+# Multi-GB, 75–86GB cases reported. Hardlink store: never edit
+# manually, `uv cache prune` keeps live env links intact.
+id: uv-cache
+title: uv cache
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/.cache/uv
+  linux:
+    - ~/.cache/uv
+native_command: uv cache prune
+regen:
+  story: uv re-populates the cache as environments are built.
+  cost: next installs re-download; network
+sudo: false
+fixture:
+  files:
+    - ~/.cache/uv/wheels/whl

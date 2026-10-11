@@ -1,0 +1,24 @@
+# Emptying the Trash is the one deletion with no undo — and regrow's
+# own undo story parks things *in* the Trash — so this is caution,
+# never auto-selected, despite clean.sh calling it safe. Finder
+# handles per-volume .Trashes too.
+id: trash-empty
+title: Empty Trash
+category: macos
+risk: caution
+paths:
+  darwin:
+    - ~/.Trash
+native_command:
+  - osascript
+  - -e
+  - tell application "Finder" to empty trash
+empties_trash: true
+note: Permanent — this is the point of no return for everything regrow (and you) previously trashed. Terminal may need Full Disk Access.
+regen:
+  story: Not regenerable — the Trash is the undo buffer.
+  cost: contents unrecoverable
+sudo: false
+fixture:
+  files:
+    - ~/.Trash/old-file

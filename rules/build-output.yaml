@@ -1,0 +1,39 @@
+# Build output of projects nobody is working in. The build-output
+# query (internal/scanner/tool_build.go) walks the project roots like
+# node-modules-dirs and lists a .next, dist, .turbo or .venv folder
+# only when an ignore rule names it, git tracks nothing inside it and
+# something in the folder that holds it, it holds no git repository of
+# its own, and its project is idle: no file under the project folder
+# changed for 30 days, git's HEAD did not move, and no running process
+# works in it. A submodule's project is its outermost superproject. A
+# root reached through a symlink is not walked, nor one such a link
+# leads into. node_modules stays with node-modules-dirs and target
+# with rust-target-dirs. Each folder is its own item, keyed by its
+# path.
+id: build-output
+title: Build output in idle projects
+category: dev-caches
+risk: caution
+tool_query: build-output
+# The folder is judged again right before each Trash move.
+pre_action: build-output-recheck
+note: A project is left out while a file in its folder changed in the last 30 days or a process works in it; a deletion or a rename alone does not count. A tool you run without changing it reads as idle - check the list before removing its dist or .venv.
+regen:
+  story: The project's build recreates .next, dist and .turbo. A .venv comes back with a new environment and an install of its packages (python -m venv and pip install, or uv sync), which downloads them again.
+  cost: seconds to minutes per build, no network; minutes and the network per .venv
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: .next · shop/web
+      path: ~/workspace/shop/web/.next
+      bytes: 900000000
+    - label: dist · shop/api
+      path: ~/workspace/shop/api/dist
+      bytes: 12000000
+    - label: .turbo · shop
+      path: ~/workspace/shop/.turbo
+      bytes: 40000000
+    - label: .venv · notebooks
+      path: ~/workspace/notebooks/.venv
+      bytes: 300000000

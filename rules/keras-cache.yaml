@@ -1,0 +1,22 @@
+# Keras downloaded weights + datasets. Only the two download subdirs —
+# ~/.keras itself also holds keras.json (user config), which stays.
+id: keras-cache
+title: Keras models + datasets cache
+category: ai
+risk: safe
+paths:
+  darwin:
+    - ~/.keras/models
+    - ~/.keras/datasets
+  linux:
+    - ~/.keras/models
+    - ~/.keras/datasets
+regen:
+  story: Keras re-downloads weights and datasets on next use.
+  cost: re-download; network
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/.keras/models/vgg16_weights.h5
+    - ~/.keras/datasets/mnist.npz

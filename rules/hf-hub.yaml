@@ -1,0 +1,26 @@
+# HuggingFace hub cache, per-repo (docs/research/02 §9). 10–100GB+ on
+# AI devs. Enumerated by a code walker over the documented cache layout
+# (tool_hf.go) — dedup-aware sizes, last-accessed via atime. Deleting
+# trashes the whole repo dir: blobs are per-repo, so this is exactly
+# what `hf cache rm` does, plus undo (decision in ARCHITECTURE.md).
+id: hf-hub
+title: HuggingFace hub models
+category: ai
+risk: caution
+tool_query: hf-hub
+note: Removes every cached revision of that model/dataset. Gated repos need your HF token again to re-download.
+regen:
+  story: Re-downloads on the next from_pretrained()/hf download of that repo.
+  cost: re-download GBs; network
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: meta-llama/Llama-3-8B
+      arg: model/meta-llama/Llama-3-8B
+      path: ~/.cache/huggingface/hub/models--meta-llama--Llama-3-8B
+      bytes: 16000000000
+    - label: squad (dataset)
+      arg: dataset/squad
+      path: ~/.cache/huggingface/hub/datasets--squad
+      bytes: 90000000

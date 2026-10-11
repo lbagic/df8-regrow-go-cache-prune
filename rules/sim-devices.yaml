@@ -1,0 +1,22 @@
+# Simulator devices, per-device via simctl only — raw rm desyncs
+# CoreSimulator's DB (docs/research/02 §6). Biggest hidden win on iOS
+# machines: 30–100GB+. simctl-only is a session invariant.
+id: sim-devices
+title: iOS simulator devices
+category: xcode
+risk: caution
+tool_query: simctl-devices
+native_command: xcrun simctl delete {arg}
+note: Erases that simulator's installed apps and data; the device itself is recreatable in seconds.
+regen:
+  story: Recreate any device via Xcode or `xcrun simctl create`.
+  cost: simulator contents (apps, settings, data) are gone
+sudo: false
+fixture:
+  items:
+    - label: iPhone 15 (iOS 17.0)
+      arg: AAA-111
+      bytes: 4000000000
+    - label: iPhone 16 (iOS 18.0)
+      arg: CCC-333
+      bytes: 3000000000

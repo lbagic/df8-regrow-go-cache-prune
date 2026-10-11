@@ -1,0 +1,20 @@
+# Debug symbols per connected device OS version. 2–5GB × N versions
+# (docs/research/02 §6). Regenerated when a device is next plugged in.
+id: xcode-device-support
+title: Xcode device support symbols
+category: xcode
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Developer/Xcode/iOS DeviceSupport
+    - ~/Library/Developer/Xcode/watchOS DeviceSupport
+    - ~/Library/Developer/Xcode/tvOS DeviceSupport
+    - ~/Library/Developer/Xcode/visionOS DeviceSupport
+regen:
+  story: Xcode re-extracts symbols the next time each device is connected.
+  cost: a few minutes per device on next connect; no network
+sudo: false
+fixture:
+  files:
+    - ~/Library/Developer/Xcode/iOS DeviceSupport/17.0/dsc
+    - ~/Library/Developer/Xcode/watchOS DeviceSupport/10.0/dsc

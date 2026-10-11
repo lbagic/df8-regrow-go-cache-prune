@@ -1,0 +1,19 @@
+# Weights & Biases artifact/file cache. Pure cache — pending offline
+# runs live in per-project ./wandb dirs, never here.
+id: wandb-cache
+title: Weights & Biases cache
+category: ai
+risk: safe
+paths:
+  darwin:
+    - ~/.cache/wandb
+  linux:
+    - ~/.cache/wandb
+regen:
+  story: wandb re-downloads artifacts from the cloud on next use.
+  cost: re-download; network
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/.cache/wandb/artifacts/obj/md5/aa/blob

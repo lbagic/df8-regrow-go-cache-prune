@@ -1,0 +1,1 @@
+[trash] media-analysis-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Containers/com.apple.mediaanalysisd/Data/Library/Caches") as alias)

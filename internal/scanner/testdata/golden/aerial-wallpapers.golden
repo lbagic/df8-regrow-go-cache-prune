@@ -1,0 +1,1 @@
+[native] aerial-wallpapers: sudo find /Library/Application Support/com.apple.idleassetsd/Customer -type f -name *.mov -delete

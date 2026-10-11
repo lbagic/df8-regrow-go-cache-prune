@@ -1,0 +1,1 @@
+[trash] macos-installers: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "/Applications/Install macOS Sequoia.app") as alias)

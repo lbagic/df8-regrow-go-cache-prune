@@ -1,0 +1,19 @@
+# Containers stopped for 30+ days, removed individually by ID — never
+# `container prune`, whose until= filter ages on created time and
+# whose blanket sweep would take fresh stopped containers with it.
+id: docker-containers-stopped
+title: Docker containers stopped 30d+
+category: docker
+risk: safe
+tool_query: docker-containers-stopped
+native_command: docker rm {arg}
+note: Anonymous volumes of removed containers are NOT deleted — they become dangling and show up under the volume rules on the next scan.
+regen:
+  story: docker run / compose up recreates containers from their images; uncommitted writable-layer changes do not come back.
+  cost: container-layer changes are lost; recreate is one command
+sudo: false
+fixture:
+  items:
+    - label: pebble-postgres — postgres:16
+      arg: 30123456789a
+      bytes: 63000000

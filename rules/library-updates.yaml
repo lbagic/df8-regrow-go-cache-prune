@@ -1,0 +1,17 @@
+# Stuck update payloads. Root-owned and dangerous mid-update, and the
+# only clean method is raw rm as root — outside our trash-first fence,
+# so surface-only (docs/research/02 §10 classes it Expert).
+id: library-updates
+title: Stuck update payloads (/Library/Updates)
+category: macos
+risk: surface-only
+paths:
+  darwin:
+    - /Library/Updates
+regen:
+  story: Check `softwareupdate -l` first; payloads re-download if an update still needs them.
+  cost: n/a — regrow never deletes here
+sudo: false
+fixture:
+  files:
+    - /Library/Updates/092-12345/payload

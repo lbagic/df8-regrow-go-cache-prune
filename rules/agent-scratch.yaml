@@ -1,0 +1,30 @@
+# Scratch of ended agent sessions. Claude Code gives each session a
+# scratch directory, /private/tmp/claude-<uid>/<project>/<session-id>/,
+# and nothing clears it before a reboot; on a machine running many
+# agents it is one of the largest regrowing owners. A session has ended
+# when no running process belongs to it or works inside its scratch,
+# and neither its transcript nor its scratch changed in the last 24h
+# (tool_agents.go). Sessions that hold a git worktree stay in
+# agent-scratch-kept: the worktree is the git-worktrees rule's to
+# remove.
+id: agent-scratch
+title: Agent session scratch (ended sessions)
+category: dev-caches
+risk: caution
+tool_query: agent-scratch
+# Liveness is judged again right before each Trash move.
+pre_action: agent-scratch-recheck
+note: Resuming an ended session finds its scratchpad gone. Live sessions, and sessions holding a git worktree, are listed under "Agent session scratch (kept)".
+regen:
+  story: Not regenerated — scratch is what an agent wrote while it worked; new sessions start with an empty one.
+  cost: an ended session's intermediate files; nothing for new sessions
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: session 11111111 · -Users-dev-proj
+      path: /private/tmp/claude-1000/-Users-dev-proj/11111111-1111-4111-8111-111111111111
+      bytes: 2000000000
+    - label: session 22222222 · -Users-dev-other
+      path: /private/tmp/claude-1000/-Users-dev-other/22222222-2222-4222-8222-222222222222
+      bytes: 300000000

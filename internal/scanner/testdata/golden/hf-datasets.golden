@@ -1,0 +1,1 @@
+[trash] hf-datasets: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.cache/huggingface/datasets") as alias)

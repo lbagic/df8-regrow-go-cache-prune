@@ -1,0 +1,1 @@
+[trash] rust-target-dirs: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/workspace/proj/target") as alias)

@@ -1,0 +1,9 @@
+[
+  {"Name": "dune_timescaledb_data", "CreatedAt": "2026-03-01T10:00:00Z", "Driver": "local", "Labels": {"com.docker.compose.project": "dune", "com.docker.compose.volume": "timescaledb_data", "com.docker.compose.version": "2.32.4"}, "Scope": "local"},
+  {"Name": "dune_chroma_data", "CreatedAt": "2026-03-01T10:00:00Z", "Driver": "local", "Labels": {"com.docker.compose.project": "dune", "com.docker.compose.volume": "chroma_data"}, "Scope": "local"},
+  {"Name": "bigvol", "CreatedAt": "2026-01-01T00:00:00Z", "Driver": "local", "Labels": null, "Scope": "local"},
+  {"Name": "keepme_data", "CreatedAt": "2026-01-01T00:00:00Z", "Driver": "local", "Labels": {}, "Scope": "local"},
+  {"Name": "3333333333333333333333333333333333333333333333333333333333333333", "CreatedAt": "2026-04-01T00:00:00Z", "Driver": "local", "Labels": {"com.docker.volume.anonymous": ""}, "Scope": "local"},
+  {"Name": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "CreatedAt": "2026-07-07T15:55:46Z", "Driver": "local", "Labels": {"com.docker.volume.anonymous": ""}, "Scope": "local"},
+  {"Name": "aabbccddcccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "CreatedAt": "2026-07-10T00:00:00Z", "Driver": "local", "Labels": {"com.docker.volume.anonymous": ""}, "Scope": "local"}
+]

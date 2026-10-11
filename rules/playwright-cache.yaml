@@ -1,0 +1,23 @@
+# Playwright's browser + transform cache. Hero bug: the esbuild
+# transform cache under this directory grew unbounded (26GB+ observed,
+# docs/research/02 Tier B); browser builds themselves are hundreds of
+# MB each and re-download on demand.
+id: playwright-cache
+title: Playwright browser cache
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Caches/ms-playwright
+  linux:
+    - ~/.cache/ms-playwright
+regen:
+  story: npx playwright install re-downloads the browsers a project needs.
+  cost: next test run re-downloads (100s of MB per browser)
+sudo: false
+doctor:
+  flag_above: 10GB
+  story: Playwright's transform-cache bug grows this dir unbounded — 26GB+ observed. A few browser builds should stay in the low GBs.
+fixture:
+  files:
+    - ~/Library/Caches/ms-playwright/chromium-1179/chrome

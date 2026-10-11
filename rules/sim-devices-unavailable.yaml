@@ -1,0 +1,17 @@
+# Devices whose runtime/SDK is no longer installed — dead weight by
+# definition (docs/research/02 §6). simctl-only.
+id: sim-devices-unavailable
+title: Unavailable simulator devices
+category: xcode
+risk: safe
+tool_query: simctl-devices-unavailable
+native_command: xcrun simctl delete unavailable
+regen:
+  story: Nothing to regenerate — these simulators reference SDKs that are gone.
+  cost: none
+sudo: false
+fixture:
+  items:
+    - label: iPhone 14 (iOS 16.4)
+      arg: BBB-222
+      bytes: 900000000

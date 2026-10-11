@@ -1,0 +1,2 @@
+[trash] user-logs: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Logs/DiagnosticReports") as alias)
+[trash] user-logs: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Logs/CrashReporter") as alias)

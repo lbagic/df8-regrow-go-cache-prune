@@ -1,0 +1,26 @@
+# Ollama models, per model via `ollama rm` only — blobs are refcounted
+# across models and the steward GCs them (docs/research/02 §9, §15).
+# 4.7–40GB+. Enumerated from the manifest store (tool_ollama.go) so
+# models show up even when the Ollama server is stopped. Sizes are
+# exclusive bytes — what deletion actually frees; bytes in blobs shared
+# with other models appear in the label and free with the last owner.
+id: ollama-models
+title: Ollama models
+category: ai
+risk: caution
+tool_query: ollama-models
+native_command: ollama rm {arg}
+note: Custom models built with `ollama create` are not re-pullable. `ollama rm` needs the Ollama server running.
+regen:
+  story: ollama pull re-downloads any registry model on demand.
+  cost: re-download GBs; network
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: llama3:latest
+      arg: llama3:latest
+      bytes: 4700000000
+    - label: nomic-embed-text:latest (+274 MB shared)
+      arg: nomic-embed-text:latest
+      bytes: 137000000

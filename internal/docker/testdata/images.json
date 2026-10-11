@@ -1,0 +1,6 @@
+[
+  {"Id": "sha256:aaa1110000000000000000000000000000000000000000000000000000000000", "RepoTags": [], "RepoDigests": [], "Metadata": {"LastTagTime": "2026-05-20T00:00:00.123456789Z"}},
+  {"Id": "sha256:bbb2220000000000000000000000000000000000000000000000000000000000", "RepoTags": [], "RepoDigests": [], "Metadata": {"LastTagTime": "2026-03-10T09:30:00Z"}},
+  {"Id": "sha256:ccc3330000000000000000000000000000000000000000000000000000000000", "RepoTags": ["postgres:16"], "RepoDigests": ["postgres@sha256:1111111111111111111111111111111111111111111111111111111111111111"], "Metadata": {"LastTagTime": "2026-06-01T07:53:42Z"}, "Identity": {"Pull": [{"Repository": "docker.io/library/postgres"}]}},
+  {"Id": "sha256:ddd4440000000000000000000000000000000000000000000000000000000000", "RepoTags": ["registry.example.com/acme/api:1.4"], "RepoDigests": ["registry.example.com/acme/api@sha256:2222222222222222222222222222222222222222222222222222222222222222"], "Metadata": {"LastTagTime": "2026-06-01T08:00:00Z"}, "Identity": {"Pull": [{"Repository": "registry.example.com/acme/api"}]}}
+]

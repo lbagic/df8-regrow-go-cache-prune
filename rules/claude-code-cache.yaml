@@ -1,0 +1,31 @@
+# Claude Code's regenerable state: debug logs, download cache, shell
+# snapshots, paste cache. Hero bug: a debug log loop wrote 100–200GB
+# on affected machines (docs/research/02 Tier B). ~/.claude/projects
+# is conversation history, not cache — never listed here.
+id: claude-code-cache
+title: Claude Code logs + caches
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/.claude/debug
+    - ~/.claude/cache
+    - ~/.claude/shell-snapshots
+    - ~/.claude/paste-cache
+  linux:
+    - ~/.claude/debug
+    - ~/.claude/cache
+    - ~/.claude/shell-snapshots
+    - ~/.claude/paste-cache
+note: Session history in ~/.claude/projects is untouched.
+regen:
+  story: Claude Code recreates logs and caches as it runs.
+  cost: none noticeable
+sudo: false
+doctor:
+  flag_above: 5GB
+  story: Known Claude Code bug loops the debug log — 100–200GB observed. Healthy installs stay under a few hundred MB.
+fixture:
+  files:
+    - ~/.claude/debug/session.log
+    - ~/.claude/shell-snapshots/snap-1

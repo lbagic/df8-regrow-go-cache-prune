@@ -1,0 +1,16 @@
+# Xcode intermediates, indexes, module cache, previews. Tier S:
+# 10–50GB typical (docs/research/02 §6).
+id: xcode-derived-data
+title: Xcode DerivedData
+category: xcode
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Developer/Xcode/DerivedData
+regen:
+  story: Xcode rebuilds intermediates and re-indexes on the next build.
+  cost: first build per project slower; no network
+sudo: false
+fixture:
+  files:
+    - ~/Library/Developer/Xcode/DerivedData/MyApp-abc/Build/x.o

@@ -1,0 +1,28 @@
+{
+  "Images": [
+    {"Containers": "0", "CreatedAt": "2026-04-15 10:00:00 +0000 UTC", "ID": "sha256:aaa1110000000000000000000000000000000000000000000000000000000000", "Repository": "<none>", "Tag": "<none>", "SharedSize": "0B", "Size": "500MB", "UniqueSize": "500MB"},
+    {"Containers": "1", "CreatedAt": "2026-03-10 09:00:00 +0000 UTC", "ID": "sha256:bbb2220000000000000000000000000000000000000000000000000000000000", "Repository": "<none>", "Tag": "<none>", "SharedSize": "0B", "Size": "300MB", "UniqueSize": "300MB"},
+    {"Containers": "1", "CreatedAt": "2026-05-20 01:18:48 +0200 CEST", "ID": "sha256:ccc3330000000000000000000000000000000000000000000000000000000000", "Repository": "postgres", "Tag": "16", "SharedSize": "0B", "Size": "657MB", "UniqueSize": "657.1MB"},
+    {"Containers": "0", "CreatedAt": "2026-04-02 12:00:00 +0000 UTC", "ID": "sha256:ddd4440000000000000000000000000000000000000000000000000000000000", "Repository": "registry.example.com/acme/api", "Tag": "1.4", "SharedSize": "0B", "Size": "847MB", "UniqueSize": "847.1MB"}
+  ],
+  "Containers": [
+    {"ID": "f0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde", "Names": "lumen-e2e-redis", "State": "running", "Size": "4.1kB"},
+    {"ID": "30123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde", "Names": "pebble-postgres", "State": "exited", "Size": "63MB"},
+    {"ID": "e0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde", "Names": "fresh-exited", "State": "exited", "Size": "1kB"}
+  ],
+  "Volumes": [
+    {"Name": "dune_timescaledb_data", "Links": "0", "Size": "567.9MB"},
+    {"Name": "dune_chroma_data", "Links": "1", "Size": "0B"},
+    {"Name": "bigvol", "Links": "0", "Size": "20GB"},
+    {"Name": "keepme_data", "Links": "0", "Size": "1GB"},
+    {"Name": "3333333333333333333333333333333333333333333333333333333333333333", "Links": "0", "Size": "965MB"},
+    {"Name": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "Links": "1", "Size": "12MB"},
+    {"Name": "aabbccddcccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "Links": "0", "Size": "10MB"}
+  ],
+  "BuildCache": [
+    {"ID": "sharedrecord000000000000", "CacheType": "regular", "InUse": "false", "Shared": "true", "Size": "139MB", "LastUsedAt": "2026-06-12 09:00:25.123456789 +0000 UTC", "UsageCount": "1"},
+    {"ID": "inuserecord0000000000000", "CacheType": "regular", "InUse": "true", "Shared": "false", "Size": "50MB", "LastUsedAt": "2026-05-01 00:00:00 +0000 UTC", "UsageCount": "3"},
+    {"ID": "recentrecord000000000000", "CacheType": "regular", "InUse": "false", "Shared": "false", "Size": "70MB", "LastUsedAt": "2026-07-12 08:00:00 +0000 UTC", "UsageCount": "1"},
+    {"ID": "stalerecord0000000000000", "CacheType": "regular", "InUse": "false", "Shared": "false", "Size": "25MB", "LastUsedAt": "2026-06-01 00:00:00 +0000 UTC", "UsageCount": "1"}
+  ]
+}

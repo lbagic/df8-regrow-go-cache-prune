@@ -1,0 +1,19 @@
+# OpenAI Whisper model cache (docs/research/02 §9) — up to ~3GB per
+# model size. Auto re-downloaded on the next transcription run.
+id: whisper-cache
+title: Whisper model cache
+category: ai
+risk: safe
+paths:
+  darwin:
+    - ~/.cache/whisper
+  linux:
+    - ~/.cache/whisper
+regen:
+  story: whisper re-downloads the model on next run.
+  cost: re-download; network
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/.cache/whisper/base.pt

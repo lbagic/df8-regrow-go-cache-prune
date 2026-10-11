@@ -1,0 +1,2 @@
+[trash] keras-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.keras/models") as alias)
+[trash] keras-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.keras/datasets") as alias)

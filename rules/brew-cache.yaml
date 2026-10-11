@@ -1,0 +1,19 @@
+# Homebrew downloads + outdated kegs. `brew cleanup -s --prune=all`
+# clears the download cache and old versions in one steward pass.
+id: brew-cache
+title: Homebrew cache + old versions
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Caches/Homebrew
+  linux:
+    - ~/.cache/Homebrew
+native_command: brew cleanup -s --prune=all
+regen:
+  story: Homebrew re-downloads bottles on the next install/upgrade.
+  cost: next upgrades re-download; network
+sudo: false
+fixture:
+  files:
+    - ~/Library/Caches/Homebrew/bottle.tar.gz

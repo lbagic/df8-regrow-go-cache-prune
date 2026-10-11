@@ -1,0 +1,19 @@
+# Downloaded module sources (GOMODCACHE). 2–20GB (docs/research/02
+# §3). Files are read-only 0444 — naive rm fails; go clean handles it.
+id: go-mod-cache
+title: Go module cache
+category: dev-caches
+risk: caution
+paths:
+  darwin:
+    - ~/go/pkg/mod
+  linux:
+    - ~/go/pkg/mod
+native_command: go clean -modcache
+regen:
+  story: Modules re-download on the next build of each project.
+  cost: network + minutes; offline builds break until re-fetched
+sudo: false
+fixture:
+  files:
+    - ~/go/pkg/mod/example.com/pkg@v1/go.mod

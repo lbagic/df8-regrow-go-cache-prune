@@ -1,0 +1,26 @@
+# Named volumes that no container references. Dangling ≠ safe: the
+# live probe behind this rule found all three dangling volumes were
+# named, compose-labeled, active-project database data — exactly what
+# `docker volume prune --all` would destroy. Per-item, never
+# auto-selected; every volume is tarballed into regrow staging before
+# rm (docs/plans/2026-07-13-docker-usage-timestamps.md).
+id: docker-volumes-named
+title: Docker dangling named volumes
+category: docker
+risk: caution
+tool_query: docker-volumes-named
+native_command: docker volume rm {arg}
+pre_action: docker-volume-export
+note: Named volumes hold real data (old database contents are the classic case). Check the project label and last-used date; each volume is exported to a tarball in regrow staging before removal.
+regen:
+  story: Not regenerable — the pre-delete tarball in regrow staging is the recovery copy (docker volume create, then untar).
+  cost: data is gone for good once staging is cleared
+sudo: false
+fixture:
+  items:
+    - label: dune_timescaledb_data — project dune
+      arg: dune_timescaledb_data
+      bytes: 567900000
+    - label: pebble_pebble-pgdata — project pebble
+      arg: pebble_pebble-pgdata
+      bytes: 2000000000

@@ -1,0 +1,4 @@
+[trash] build-output: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/workspace/shop/web/.next") as alias)  (pre: build-output-recheck)
+[trash] build-output: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/workspace/shop/api/dist") as alias)  (pre: build-output-recheck)
+[trash] build-output: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/workspace/shop/.turbo") as alias)  (pre: build-output-recheck)
+[trash] build-output: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/workspace/notebooks/.venv") as alias)  (pre: build-output-recheck)

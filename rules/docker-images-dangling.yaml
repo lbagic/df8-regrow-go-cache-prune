@@ -1,0 +1,22 @@
+# Images docker lists no name for that no container uses, removed by
+# ID. The containerd image store counts a digest reference as a name;
+# the classic one does not, so there an image pulled by digest is
+# listed here. Tagged images belong to docker-images-unused. Neither
+# rule runs `image prune --filter until=`: it ages an image from its
+# build (classic image store) or from when its record was created
+# here (containerd image store), never from its last use.
+id: docker-images-dangling
+title: Docker dangling images
+category: docker
+risk: safe
+tool_query: docker-images-dangling
+native_command: docker image rm {arg}
+regen:
+  story: Dangling layers are superseded build leftovers; the next build or pull recreates what is still needed.
+  cost: next build slower; network for re-pulled layers
+sudo: false
+fixture:
+  items:
+    - label: aaa111000000 (dangling)
+      arg: aaa111000000
+      bytes: 500000000

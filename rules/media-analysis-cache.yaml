@@ -1,0 +1,20 @@
+# mediaanalysisd cache — Sequoia 15.1 leak filled disks with 100GB+
+# of cache bundles; fixed in 15.2 but the cache is regenerable on any
+# version (docs/research/02 §10). Photos themselves are untouched.
+id: media-analysis-cache
+title: mediaanalysisd cache
+category: macos
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Containers/com.apple.mediaanalysisd/Data/Library/Caches
+regen:
+  story: The photo-analysis daemon rebuilds its cache in the background.
+  cost: some background CPU; photos and analysis results unaffected
+sudo: false
+doctor:
+  flag_above: 2GB
+  story: Sequoia 15.1 leak filled disks with up to 143GB of mediaanalysisd cache (fixed in 15.2). Healthy caches stay around 100MB.
+fixture:
+  files:
+    - ~/Library/Containers/com.apple.mediaanalysisd/Data/Library/Caches/blob

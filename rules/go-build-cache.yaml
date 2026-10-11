@@ -1,0 +1,34 @@
+# Go compiler build cache (GOCACHE). 1–15GB typical
+# (docs/research/02 §3). Steward command over raw rm.
+id: go-build-cache
+title: Go build cache
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Caches/go-build
+  linux:
+    - ~/.cache/go-build
+native_command: go clean -cache
+# `regrow prune go-build` and autotrim: Go has no "trim older than"
+# command and drops entries only after 5 days unused, so entries unused
+# for min_age are deleted directly, oldest first, until the cache is
+# down to keep_under or free space is back at its target.
+prune:
+  min_age: 48h
+  keep_under: 15GiB
+  unless_running: [go, compile, link]
+regen:
+  story: Repopulated automatically by the next go build.
+  cost: next builds slower once; no network
+sudo: false
+causes:
+  - check: go-worktrees-trimpath
+    title: Go worktrees without -trimpath
+    story: Go keys build-cache entries by each package's absolute directory unless -trimpath is set, so every git worktree of a module compiles its own copy of it into the cache (24 copies of one 437 MB package measured on a worktree-heavy machine). With -trimpath, worktrees at the same code share entries.
+    fix:
+      - "go env -w GOFLAGS=-trimpath   (keep any flags GOFLAGS already has; debugger and stack-trace paths become module-relative)"
+      - "Or set GOFLAGS=-trimpath only in the environment that builds in the worktrees. This row reads `go env` in regrow's own environment, so it then stays."
+fixture:
+  files:
+    - ~/Library/Caches/go-build/00/hash

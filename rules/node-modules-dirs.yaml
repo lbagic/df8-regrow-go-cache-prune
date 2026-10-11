@@ -1,0 +1,24 @@
+# Per-project node_modules discovery — aggregate is the largest JS
+# category (docs/research/02 §1). Name match is safe here because
+# roots are project trees, not app bundles.
+id: node-modules-dirs
+title: node_modules in project trees
+category: dev-caches
+risk: caution
+discover:
+  roots:
+    - ~/workspace
+    - ~/dev
+    - ~/projects
+    - ~/src
+    - ~/code
+  name: node_modules
+  max_depth: 10
+note: Pick projects you are not actively working in — reinstall is a command away but takes minutes each.
+regen:
+  story: npm/yarn/pnpm install recreates it from the project lockfile.
+  cost: minutes per project; network
+sudo: false
+fixture:
+  files:
+    - ~/workspace/webapp/node_modules/lodash/index.js

@@ -1,0 +1,2 @@
+[trash] hf-hub: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.cache/huggingface/hub/models--meta-llama--Llama-3-8B") as alias)
+[trash] hf-hub: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.cache/huggingface/hub/datasets--squad") as alias)

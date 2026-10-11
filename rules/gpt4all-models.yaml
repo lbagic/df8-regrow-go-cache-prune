@@ -1,0 +1,19 @@
+# GPT4All downloaded models, one row per .gguf. The glob deliberately
+# skips the sibling localdocs database (user-built embeddings).
+id: gpt4all-models
+title: GPT4All models
+category: ai
+risk: caution
+paths:
+  darwin:
+    - ~/Library/Application Support/nomic.ai/GPT4All/*.gguf
+  linux:
+    - ~/.local/share/nomic.ai/GPT4All/*.gguf
+regen:
+  story: Re-download any model from GPT4All's in-app catalog.
+  cost: re-download GBs; network
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/Library/Application Support/nomic.ai/GPT4All/Meta-Llama-3-8B-Instruct.Q4_0.gguf

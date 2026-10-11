@@ -1,0 +1,19 @@
+# llama.cpp download cache — models fetched with `llama-server -hf`
+# and friends land here, separate from the HF hub cache.
+id: llama-cpp-cache
+title: llama.cpp model cache
+category: ai
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Caches/llama.cpp
+  linux:
+    - ~/.cache/llama.cpp
+regen:
+  story: llama.cpp re-downloads on the next -hf run.
+  cost: re-download GBs; network
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/Library/Caches/llama.cpp/ggml-org_gemma-3-4b-it-GGUF_gemma-3-4b-it-Q4_K_M.gguf

@@ -1,0 +1,2 @@
+[trash] xcode-device-support: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Developer/Xcode/iOS DeviceSupport") as alias)
+[trash] xcode-device-support: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Developer/Xcode/watchOS DeviceSupport") as alias)

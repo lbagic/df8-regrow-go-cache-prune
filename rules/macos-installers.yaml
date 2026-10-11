@@ -1,0 +1,16 @@
+# "Install macOS *.app" left in /Applications after upgrades —
+# 12GB+ each, freely re-downloadable (docs/research/02 §10).
+id: macos-installers
+title: Stale macOS installers
+category: macos
+risk: safe
+paths:
+  darwin:
+    - /Applications/Install macOS*.app
+regen:
+  story: Any macOS installer re-downloads from Software Update or the App Store.
+  cost: 12GB+ download if you ever need it again
+sudo: false
+fixture:
+  files:
+    - /Applications/Install macOS Sequoia.app/Contents/Info.plist

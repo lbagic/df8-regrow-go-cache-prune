@@ -1,0 +1,27 @@
+# Local Time Machine snapshots — the big chunk of "System Data"
+# phantom space (docs/research/02 §10, Prompt H: phantom-space is its
+# own category). Per-snapshot deletion by the date embedded in the
+# name (Prompt G0 refit; was thinlocalsnapshots — decision logged in
+# ARCHITECTURE.md). External TM backups are untouched. OS-update
+# snapshots (com.apple.os.update-*) are system-managed and not listed.
+id: tm-snapshots
+title: Time Machine local snapshots
+category: phantom-space
+risk: caution
+tool_query: tm-snapshots
+native_command: tmutil deletelocalsnapshots {arg}
+note: Snapshot sizes are invisible until deleted — freed space shows up as purgeable, sometimes minutes later.
+regen:
+  story: macOS creates fresh local snapshots on the next backup cycle.
+  cost: point-in-time restores between backups are gone
+# deletelocalsnapshots-by-date runs unprivileged (verified live on
+# macOS 15); if an older release demands root, tmutil fails loudly and
+# the executor records the failure — nothing silent.
+sudo: false
+fixture:
+  # APFS cannot size snapshots pre-delete; items carry zero bytes
+  items:
+    - label: com.apple.TimeMachine.2026-07-12-090000.local
+      arg: 2026-07-12-090000
+    - label: com.apple.TimeMachine.2026-07-13-090000.local
+      arg: 2026-07-13-090000

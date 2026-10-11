@@ -1,0 +1,18 @@
+# Content-addressed tarball cache. 1–5GB (docs/research/02 §2).
+id: npm-cache
+title: npm cache
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/.npm
+  linux:
+    - ~/.npm
+native_command: npm cache clean --force
+regen:
+  story: npm re-fetches packages into the cache as installs need them.
+  cost: next installs re-download; network
+sudo: false
+fixture:
+  files:
+    - ~/.npm/_cacache/blob

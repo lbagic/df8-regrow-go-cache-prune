@@ -1,0 +1,28 @@
+# The Docker Desktop VM disk file — the "pruned but disk still full"
+# phantom (docs/research/02 §7). Surface-only: deleting it destroys
+# every image/container/volume; shrinking is Docker's job (TRIM on
+# Docker.raw) or Troubleshoot ▸ Purge Data. The tool query stats the
+# sparse file and labels real vs logical size (Prompt H) — it works
+# with the daemon down; the deletable insides are the per-item
+# docker-* rules.
+id: docker-vm-disk
+title: Docker Desktop VM disk
+category: phantom-space
+risk: surface-only
+tool_query: docker-vm-disk
+note: Why Finder still shows full — the file is sparse; only the "real" number is on disk. Pruning inside Docker (see the docker rules) lets it shrink itself.
+regen:
+  story: Shrinks itself after pruning (Docker.raw, 4.28+); last resort is Docker Desktop ▸ Troubleshoot ▸ Purge Data.
+  cost: n/a — regrow never touches this file
+sudo: false
+causes:
+  - check: docker-vm-memory
+    title: Docker VM memory cap
+    story: Docker Desktop's VM may take up to half of the Mac's memory by default, and a limit set that high or higher changes nothing. What the Mac then lacks goes to swap, and swap files sit on the same disk — an 8 GiB Docker VM was the largest process in a memory-pressure (jetsam) event on a 16 GiB machine.
+    fix:
+      - "Docker Desktop ▸ Settings ▸ Resources ▸ Advanced: lower Memory limit to what the containers need, below half of this Mac's memory, then Apply & restart"
+fixture:
+  items:
+    - label: Docker.raw — 35.2 GiB real of 64.0 GiB sparse
+      path: ~/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw
+      bytes: 37789163520

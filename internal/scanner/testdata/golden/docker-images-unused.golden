@@ -1,0 +1,2 @@
+[native] docker-images-unused: docker image rm c0ffee123456
+[native] docker-images-unused: docker image rm 0ddba11c0de5

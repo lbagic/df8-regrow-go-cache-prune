@@ -1,0 +1,1 @@
+[trash] node-modules-dirs: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/workspace/webapp/node_modules") as alias)

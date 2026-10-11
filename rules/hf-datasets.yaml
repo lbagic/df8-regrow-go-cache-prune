@@ -1,0 +1,22 @@
+# HuggingFace datasets *processing* cache — Arrow tables built from
+# raw downloads (raw files live in the hub cache, hf-hub rule). Caution
+# because regen is compute, not just bandwidth: re-tokenizing a large
+# corpus can take hours.
+id: hf-datasets
+title: HuggingFace datasets cache
+category: ai
+risk: caution
+paths:
+  darwin:
+    - ~/.cache/huggingface/datasets
+  linux:
+    - ~/.cache/huggingface/datasets
+note: Preprocessed Arrow caches — the datasets library rebuilds them, but big corpora reprocess for hours.
+regen:
+  story: datasets re-downloads and re-processes on next load_dataset().
+  cost: re-processing time (can be hours for large corpora); network
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/.cache/huggingface/datasets/squad/plain_text/0.0.0/dataset_info.json

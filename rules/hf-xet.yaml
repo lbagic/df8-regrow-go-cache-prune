@@ -1,0 +1,20 @@
+# Xet chunk cache — huggingface_hub's newer download backend keeps a
+# content-addressed chunk store to speed up re-downloads. Pure cache:
+# nothing references it after files land in the hub cache.
+id: hf-xet
+title: HuggingFace Xet download cache
+category: ai
+risk: safe
+paths:
+  darwin:
+    - ~/.cache/huggingface/xet
+  linux:
+    - ~/.cache/huggingface/xet
+regen:
+  story: Chunks re-populate as models are downloaded through Xet.
+  cost: slightly slower next downloads
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/.cache/huggingface/xet/chunk-cache/aa/chunk

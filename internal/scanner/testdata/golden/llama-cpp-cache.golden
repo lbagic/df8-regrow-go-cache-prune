@@ -1,0 +1,1 @@
+[trash] llama-cpp-cache: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Caches/llama.cpp") as alias)

@@ -1,0 +1,1 @@
+[native] go-mod-cache: go clean -modcache

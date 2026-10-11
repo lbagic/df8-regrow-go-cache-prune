@@ -1,0 +1,26 @@
+# Every agent session scratch directory regrow keeps back, with the
+# reason in the row: a process still runs the session or works inside
+# its scratch, its transcript or scratch changed in the last 24h, it
+# could not be read in full, or it holds a git worktree (removed by the
+# git-worktrees rule, after which the session is offered under
+# agent-scratch). Surface-only so the space is visible without being
+# one keystroke from gone.
+id: agent-scratch-kept
+title: Agent session scratch (kept)
+category: dev-caches
+risk: surface-only
+tool_query: agent-scratch-kept
+note: Each row says why it is kept. Ended sessions move to "Agent session scratch (ended sessions)" a day after their last change.
+regen:
+  story: n/a — regrow never deletes these; end the session, or remove the worktree it holds, and rescan.
+  cost: n/a
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: session 33333333 · -Users-dev-proj — running
+      path: /private/tmp/claude-1000/-Users-dev-proj/33333333-3333-4333-8333-333333333333
+      bytes: 500000000
+    - label: session 44444444 · -Users-dev-proj — holds git worktree scratchpad/wt; remove the worktree first
+      path: /private/tmp/claude-1000/-Users-dev-proj/44444444-4444-4444-8444-444444444444
+      bytes: 900000000

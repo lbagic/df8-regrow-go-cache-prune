@@ -1,0 +1,18 @@
+# pip wheel/download cache. 0.5–5GB (docs/research/02 §4b).
+id: pip-cache
+title: pip cache
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Caches/pip
+  linux:
+    - ~/.cache/pip
+native_command: pip3 cache purge
+regen:
+  story: pip re-downloads wheels as installs need them.
+  cost: next installs re-download; network
+sudo: false
+fixture:
+  files:
+    - ~/Library/Caches/pip/wheels/whl

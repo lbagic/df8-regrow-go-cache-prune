@@ -1,0 +1,25 @@
+# Stable Diffusion model libraries — ComfyUI, SD-WebUI/Forge, Fooocus
+# all share the models/checkpoints layout, so one marker discovery
+# catches every install. Surface-only by invariant: checkpoints, LoRAs
+# and finetunes are often irreplaceable (docs/research/02 §9, §15
+# "never auto-delete").
+id: comfyui-sd-models
+title: Stable Diffusion model libraries (ComfyUI/SD-WebUI)
+category: ai
+risk: surface-only
+discover:
+  roots:
+    - "~"
+  name: models
+  markers:
+    - checkpoints
+  max_depth: 5
+note: Model libraries are often irreplaceable (custom merges, deleted civitai uploads) — review and prune inside the app's folder yourself.
+regen:
+  story: Not regenerable — downloaded checkpoints may no longer be hosted; merges and finetunes are one of a kind.
+  cost: potentially unrecoverable models
+sudo: false
+beta: true
+fixture:
+  files:
+    - ~/ComfyUI/models/checkpoints/sd_xl_base_1.0.safetensors

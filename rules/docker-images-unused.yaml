@@ -1,0 +1,35 @@
+# Tagged images no container runs or mounts (stopped containers count
+# as use), last pulled or tagged here 30+ days ago, removed one by one
+# by ID. Never --force: unforced, docker refuses an image a container
+# was created from after the scan. An image is listed only when its one
+# tag is in a repository docker records its content as pulled from or
+# pushed to, because `docker pull` is the whole regeneration story; an
+# image docker records as built here, a retag into another repository
+# and a load stay out. A build pushed under its own name looks pulled
+# when docker kept no build record: a push leaves the record a pull
+# does. That record names the repository, not the tag, so a tag made
+# locally inside a pulled repository looks pulled too. Images with no
+# name at all belong to docker-images-dangling; in the containerd
+# image store one known only by a digest is in neither rule. The
+# tiering and the 30 days live in internal/docker (offerUnusedImage,
+# staleAge).
+id: docker-images-unused
+title: Docker unused images pulled 30d+
+category: docker
+risk: caution
+tool_query: docker-images-unused
+native_command: docker image rm {arg}
+note: Docker records when an image was pulled, not when it last ran. An image used only by `docker run --rm`, or by a compose stack that is down, is listed here. Listed images are ones Docker records as pulled from or pushed to the repository they are named for. Docker does not record the tag, so a tag you made yourself inside that repository is listed too, though no registry has it; and an image built here and pushed under its own name is listed when Docker kept no record of the build, and only the registry's copy brings it back.
+regen:
+  story: docker pull, or the next docker run / compose up that names the image, downloads it again from the registry it was pulled from or pushed to.
+  cost: re-download over the network; needs registry access and the registry's copy, and a tag that moved since brings a newer image
+sudo: false
+beta: true
+fixture:
+  items:
+    - label: registry.example.com/acme/api:1.4
+      arg: c0ffee123456
+      bytes: 847100000
+    - label: example/db:16
+      arg: 0ddba11c0de5
+      bytes: 657100000

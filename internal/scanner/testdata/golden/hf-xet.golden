@@ -1,0 +1,1 @@
+[trash] hf-xet: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/.cache/huggingface/xet") as alias)

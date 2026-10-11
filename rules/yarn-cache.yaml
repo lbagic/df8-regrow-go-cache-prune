@@ -1,0 +1,20 @@
+# Yarn classic global cache. 5–10GB (docs/research/02 §2). Berry
+# zero-install project caches are a different, riskier animal — not
+# this rule.
+id: yarn-cache
+title: Yarn cache
+category: dev-caches
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Caches/Yarn
+  linux:
+    - ~/.cache/yarn
+native_command: yarn cache clean
+regen:
+  story: Yarn re-downloads package tarballs on the next install.
+  cost: next installs re-download; network
+sudo: false
+fixture:
+  files:
+    - ~/Library/Caches/Yarn/v6/pkg.tgz

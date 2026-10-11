@@ -1,0 +1,1 @@
+[native] docker-build-cache: docker builder prune --force --filter unused-for=720h

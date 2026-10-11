@@ -1,0 +1,18 @@
+# Crash reports + diagnostic logs for the current user.
+id: user-logs
+title: Crash reports + diagnostic logs
+category: macos
+risk: safe
+paths:
+  darwin:
+    - ~/Library/Logs/DiagnosticReports
+    - ~/Library/Logs/CrashReporter
+note: Keep these if you are actively debugging a crashing app — they are the evidence.
+regen:
+  story: macOS recreates the directories and writes new reports as crashes happen.
+  cost: history of past crashes is gone
+sudo: false
+fixture:
+  files:
+    - ~/Library/Logs/DiagnosticReports/app.crash
+    - ~/Library/Logs/CrashReporter/app.crash

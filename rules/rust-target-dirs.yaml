@@ -1,0 +1,28 @@
+# Per-project Rust build dirs, found by CACHEDIR.TAG marker — never
+# by name alone (docs/research/02 §15). #1 Rust win: 5–20GB each.
+# Roots are conventional project locations; missing ones are skipped.
+id: rust-target-dirs
+title: Rust target/ build directories
+category: dev-caches
+risk: safe
+discover:
+  roots:
+    - ~/workspace
+    - ~/dev
+    - ~/projects
+    - ~/src
+    - ~/code
+  name: target
+  markers:
+    - CACHEDIR.TAG
+  max_depth: 6
+regen:
+  story: cargo rebuilds the project on the next cargo build.
+  cost: minutes to tens of minutes per project; no network
+sudo: false
+fixture:
+  # decoy target/ without CACHEDIR.TAG must NOT match
+  files:
+    - ~/workspace/proj/target/CACHEDIR.TAG
+    - ~/workspace/proj/target/debug/bin
+    - ~/workspace/decoy/target/notes.txt

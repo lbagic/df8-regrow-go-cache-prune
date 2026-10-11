@@ -1,0 +1,1 @@
+[trash] sim-caches: osascript -e tell application "Finder" to return POSIX path of ((delete POSIX file "~/Library/Developer/CoreSimulator/Caches") as alias)

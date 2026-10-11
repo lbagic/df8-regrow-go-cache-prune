@@ -1,0 +1,1 @@
+[native] sim-runtimes: xcrun simctl runtime delete 11111111-2222

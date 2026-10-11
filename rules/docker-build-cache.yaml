@@ -1,0 +1,28 @@
+# Build cache is the one docker object with native last-used
+# tracking, so the daemon's own age filter is the steward command.
+# unused-for=720h = the same 30 days the scanner sums; keep in sync
+# with internal/docker staleAge. Records shared with an image layer
+# are left out of the sum: pruning them frees nothing.
+id: docker-build-cache
+title: Docker build cache unused 30d+
+category: docker
+risk: safe
+tool_query: docker-build-cache
+native_command: docker builder prune --force --filter unused-for=720h
+regen:
+  story: The next docker build repopulates exactly the layers it needs.
+  cost: next builds slower
+sudo: false
+causes:
+  - check: docker-build-cache-limit
+    title: Docker build-cache limit
+    story: BuildKit keeps build layers until its garbage collection removes them. With the collection switched off in the engine's config, nothing limits the cache, and it grows inside the Docker VM disk until someone prunes it.
+    fix:
+      - 'Docker Desktop ▸ Settings ▸ Docker Engine: set "builder": {"gc": {"enabled": true, "defaultReservedSpace": "20GB"}}   (before Docker Engine 28 the size key is defaultKeepStorage)'
+      - 'Remove "policy": [] from "gc" if it is there: while a policy is present the engine ignores the default sizes'
+      - "Then Apply & restart"
+      - "Records unused for 30 days go with: regrow clean docker-build-cache"
+fixture:
+  items:
+    - label: build cache unused for 30d+
+      bytes: 139000000

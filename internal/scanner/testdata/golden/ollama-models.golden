@@ -1,0 +1,2 @@
+[native] ollama-models: ollama rm llama3:latest
+[native] ollama-models: ollama rm nomic-embed-text:latest

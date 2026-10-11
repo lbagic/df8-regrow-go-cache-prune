@@ -1,0 +1,2 @@
+[native] git-worktrees: git -C ~/workspace/app/.claude/worktrees/feature-a worktree remove ~/workspace/app/.claude/worktrees/feature-a  (pre: worktree-recheck)
+[native] git-worktrees: git -C ~/workspace/app/.claude/worktrees/fix-b worktree remove ~/workspace/app/.claude/worktrees/fix-b  (pre: worktree-recheck)
