@@ -14,6 +14,12 @@ func nativeRule(id string) Rule {
 	return Rule{ID: id, Category: "test", Risk: RiskSafe, NativeCommand: Argv{"tool", "clean"}}
 }
 
+// volumeRule removes a docker volume after exporting it, as the
+// catalog's volume rules do.
+func volumeRule(id string) Rule {
+	return Rule{ID: id, Category: "test", Risk: RiskCaution, NativeCommand: Argv{"docker", "volume", "rm", "{arg}"}, PreAction: PreActionVolumeExport}
+}
+
 // Exclusive subtracts direct children only: A − B, not A − B − C.
 func TestAccountThreeLevelNesting(t *testing.T) {
 	findings := []Finding{
@@ -62,8 +68,9 @@ func TestAccountTotalsAcrossActionableRules(t *testing.T) {
 		{Rule: Rule{ID: "snapshots", Category: CategoryPhantomSpace, Risk: RiskCaution, NativeCommand: Argv{"tmutil", "delete"}},
 			Items: []Item{{Label: "snap", Bytes: 3}}},
 		{Rule: trashRule("gated"), Items: []Item{{Path: "/Users/t/gated", Partial: true}}},
+		{Rule: volumeRule("docker-volumes"), Items: []Item{{Label: "dune_db", Bytes: 11}}},
 	}
-	want := Totals{FreesNow: 79, AfterTrash: 30, ShownOnly: 5, MacOSManaged: 3, Partial: 1}
+	want := Totals{FreesNow: 79, AfterTrash: 30, Exported: 11, ShownOnly: 5, MacOSManaged: 3, Partial: 1}
 	if got := Account(findings).Totals; got != want {
 		t.Fatalf("totals = %+v, want %+v", got, want)
 	}
@@ -79,6 +86,8 @@ func TestBucketNamesTheTotalARuleCountsIn(t *testing.T) {
 		{nativeRule("steward"), BucketFreesNow},
 		{Rule{ID: "pruned", Risk: RiskSafe, Prune: &Prune{}}, BucketFreesNow},
 		{trashRule("trashed"), BucketAfterTrash},
+		{volumeRule("volumes"), BucketExported},
+		{Rule{ID: "volumes-kept", Risk: RiskSurfaceOnly, NativeCommand: Argv{"docker", "volume", "rm", "{arg}"}, PreAction: PreActionVolumeExport}, BucketShownOnly},
 		{Rule{ID: "shown", Risk: RiskSurfaceOnly}, BucketShownOnly},
 		{Rule{ID: "phantom", Category: CategoryPhantomSpace, Risk: RiskCaution, NativeCommand: Argv{"tmutil", "delete"}}, BucketMacOSManaged},
 		{Rule{ID: "phantom-shown", Category: CategoryPhantomSpace, Risk: RiskSurfaceOnly}, BucketMacOSManaged},
@@ -113,8 +122,50 @@ func TestBucketNamesTheTotalARuleCountsIn(t *testing.T) {
 			t.Errorf("%s: Totals has no JSON field %q", tt.rule.ID, tt.want)
 		}
 	}
-	if len(seen) != 4 {
-		t.Fatalf("the table walks %d buckets, want all four", len(seen))
+	if len(seen) != 5 {
+		t.Fatalf("the table walks %d buckets, want all five", len(seen))
+	}
+}
+
+// The catalog's volume rules export before they remove, so their bytes
+// are in the exported total, and a kept volume stays shown only.
+func TestCatalogVolumeRulesCountAsExported(t *testing.T) {
+	catalog, err := LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"docker-volumes-named": BucketExported,
+		"docker-volumes-anon":  BucketExported,
+		"docker-volumes-kept":  BucketShownOnly,
+	}
+	for _, r := range catalog {
+		if w, ok := want[r.ID]; ok {
+			if got := Bucket(r); got != w {
+				t.Errorf("Bucket(%s) = %q, want %q", r.ID, got, w)
+			}
+			delete(want, r.ID)
+		}
+		if r.PreAction == PreActionVolumeExport && Bucket(r) != BucketExported && r.Risk.Actionable() {
+			t.Errorf("%s exports before it removes but counts in %q", r.ID, Bucket(r))
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("rules missing from the catalog: %v", want)
+	}
+}
+
+// A scan's ledger and the plan of the same selection put a volume's
+// bytes in the same total.
+func TestPlanAndLedgerCountAVolumeExportAlike(t *testing.T) {
+	rule := volumeRule("docker-volumes")
+	findings := []Finding{{Rule: rule, Items: []Item{{Label: "dune_db", Arg: "dune_db", Bytes: 30}, {Label: "scratch", Arg: "scratch", Bytes: 12}}}}
+	plan := BuildPlan(Host{OS: "darwin", Home: "/Users/t"}, findings, map[string]bool{rule.ID: true})
+	if len(plan.Actions) != 2 {
+		t.Fatalf("plan = %+v, want one action per volume", plan)
+	}
+	if got, want := plan.Totals(), Account(findings).Totals; got != want || got.Exported != 42 || got.FreesNow != 0 {
+		t.Fatalf("plan totals = %+v, ledger totals = %+v, want both 42 exported and nothing freed now", got, want)
 	}
 }
 

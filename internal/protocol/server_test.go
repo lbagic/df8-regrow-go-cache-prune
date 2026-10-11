@@ -118,7 +118,7 @@ func TestScanPlanExecuteOverPipes(t *testing.T) {
 	if scan[4].ScanID != scanID || *scan[4].Totals != (engine.Totals{AfterTrash: 140, Partial: 1}) || !sameJSON(t, scan[4].Exclusive, exclusive) {
 		t.Errorf("summary = %s", scan[4].raw)
 	}
-	if !strings.Contains(scan[4].raw, `"totals":{"frees_now":0,"after_trash":140,"shown_only":0,"macos_managed":0,"partial":1}`) {
+	if !strings.Contains(scan[4].raw, `"totals":{"frees_now":0,"after_trash":140,"exported":0,"shown_only":0,"macos_managed":0,"partial":1}`) {
 		t.Errorf("summary totals keys = %s", scan[4].raw)
 	}
 	if scan[5].Canceled == nil || *scan[5].Canceled || scan[5].ElapsedMS == nil {
@@ -251,6 +251,45 @@ func TestFindingEventsCarryBucketAndSelect(t *testing.T) {
 		if a.Path == path("gated") {
 			t.Errorf("an unreadable item was planned: %+v", a)
 		}
+	}
+}
+
+// A docker volume is exported to a tarball before it is removed, so
+// its bytes are in the exported total at scan time and in the plan,
+// never in frees_now.
+func TestAVolumeExportIsItsOwnTotal(t *testing.T) {
+	m := newMachine(t)
+	rule := engine.Rule{ID: "fixture-volumes", Risk: engine.RiskCaution, ToolQuery: "fixture",
+		NativeCommand: engine.Argv{"docker", "volume", "rm", "{arg}"}, PreAction: engine.PreActionVolumeExport}
+	findings := []engine.Finding{
+		{Rule: rule, Items: []engine.Item{{Label: "dune_db", Arg: "dune_db", Bytes: 30}, {Label: "scratch", Arg: "scratch", Bytes: 12}}},
+		{Rule: engine.Rule{ID: "fixture-steward", Risk: engine.RiskSafe, NativeCommand: engine.Argv{"fixture-wipe"}},
+			Items: []engine.Item{{Path: filepath.Join(m.home, "proj", "steward"), Bytes: 9}}},
+	}
+	srv := m.server()
+	srv.Catalog = []engine.Rule{rule, findings[1].Rule}
+	srv.Scan = scanOf(findings)
+	srv.Account = engine.Account
+	p := start(t, srv)
+	p.expect("hello")
+
+	p.send(`{"type":"scan","id":"s"}`)
+	scan := p.expect("start/s", "finding/s", "finding/s", "summary/s", "done/s")
+	if scan[1].Bucket != engine.BucketExported || scan[2].Bucket != engine.BucketFreesNow {
+		t.Errorf("finding buckets = %q and %q, want a volume rule in %q and a steward command in %q",
+			scan[1].Bucket, scan[2].Bucket, engine.BucketExported, engine.BucketFreesNow)
+	}
+	if *scan[3].Totals != (engine.Totals{FreesNow: 9, Exported: 42}) || !strings.Contains(scan[3].raw, `"exported":42`) {
+		t.Errorf("summary = %s, want 9 bytes frees_now and 42 exported", scan[3].raw)
+	}
+
+	sent, err := json.Marshal(append(append([]string{}, scan[1].Select...), scan[2].Select...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := p.planned("p", scan[0].ScanID, string(sent))
+	if *e.Totals != (engine.Totals{FreesNow: 9, Exported: 42}) || !strings.Contains(e.raw, `"exported":42`) {
+		t.Errorf("plan totals = %s, want 9 bytes frees_now and 42 exported", e.raw)
 	}
 }
 

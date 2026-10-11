@@ -49,7 +49,7 @@ A scan's accounting: every measured byte in exactly one item (its size minus the
 _Avoid_: total found; not the docker usage ledger
 
 **Bucket**:
-When, if ever, an item's bytes become free space, derived from its rule: frees now (steward command), after Trash (Trash move), shown only (surface-only), macOS-managed (phantom space).
+When, if ever, an item's bytes become free space, derived from its rule: frees now (steward command), after Trash (Trash move), volume exports (a docker volume removed after its export; the tarball keeps the room until it is deleted), shown only (surface-only), macOS-managed (phantom space).
 
 **Written off**:
 A filesystem call the scan stopped waiting for: it made no progress for the stall window while nothing else answered. Its path stays blocked, never touched again, until that call answers.

@@ -696,6 +696,9 @@ func (m Model) listFooter() string {
 // that fit an 80-column terminal.
 func ledgerLines(t engine.Totals) [2]string {
 	actionable := fmt.Sprintf("frees now %s · after Trash %s", HumanBytes(t.FreesNow), HumanBytes(t.AfterTrash))
+	if t.Exported > 0 {
+		actionable += fmt.Sprintf(" · volume exports %s", HumanBytes(t.Exported))
+	}
 	rest := fmt.Sprintf("shown only %s · macOS-managed %s", HumanBytes(t.ShownOnly), HumanBytes(t.MacOSManaged))
 	if t.Partial > 0 {
 		rest += fmt.Sprintf(" · %d unreadable in part", t.Partial)

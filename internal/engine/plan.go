@@ -91,14 +91,17 @@ func (p Plan) TotalBytes() int64 {
 
 // Totals buckets the plan's bytes by when they become free space: a
 // steward command frees them as it runs, a Trash move frees nothing
-// until the Trash is emptied.
+// until the Trash is emptied, and a command that exports first (a docker
+// volume removal) leaves a tarball in staging until it is deleted.
 func (p Plan) Totals() Totals {
 	var t Totals
 	for _, a := range p.Actions {
-		switch a.Kind {
-		case ActionNative, ActionPrune:
+		switch {
+		case a.Kind == ActionNative && a.PreAction == PreActionVolumeExport:
+			t.Exported += a.Bytes
+		case a.Kind == ActionNative || a.Kind == ActionPrune:
 			t.FreesNow += a.Bytes
-		case ActionTrash:
+		case a.Kind == ActionTrash:
 			t.AfterTrash += a.Bytes
 		}
 	}

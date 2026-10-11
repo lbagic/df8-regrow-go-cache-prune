@@ -11,7 +11,7 @@ The look of regrow's scan page (`app/Resources/page.html`): the findings, the pl
   --accent: #1e6a45; --accent-soft: #ddebdf; --on-accent: #ffffff;
   --caution: #9a5b00; --danger: #b3261e; --on-danger: #ffffff;
   --taken: #7b887f; --purge: #b3beb5; --track: #e2e7df;
-  --b-now: #3280de; --b-trash: #039868; --b-shown: #4a3ba8; --b-macos: #da6e97;
+  --b-now: #3280de; --b-trash: #039868; --b-export: #c2780f; --b-shown: #4a3ba8; --b-macos: #da6e97;
   --serif: ui-serif, "New York", Georgia, serif;
   --sans: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
@@ -22,7 +22,7 @@ The look of regrow's scan page (`app/Resources/page.html`): the findings, the pl
   --accent: #78c79a; --accent-soft: #1f3327; --on-accent: #0e1a12;
   --caution: #e0a84a; --danger: #f08a80; --on-danger: #2a0f0c;
   --taken: #8d9a90; --purge: #56625a; --track: #2a322c;
-  --b-now: #4795f4; --b-trash: #30ac7d; --b-shown: #6456b5; --b-macos: #b53266;
+  --b-now: #4795f4; --b-trash: #30ac7d; --b-export: #d98f2e; --b-shown: #6456b5; --b-macos: #b53266;
 ```
 
 The page follows `prefers-color-scheme`; `data-theme="light|dark"` on `<html>` overrides it for a screenshot.
@@ -31,7 +31,7 @@ The page follows `prefers-color-scheme`; `data-theme="light|dark"` on `<html>` o
 
 - `--accent` is the one action colour: links, the primary button, the progress bar, the current step, a tick box.
 - `--danger` marks what cannot be undone or did not work: the run button and its tick box, the "Not scanned" heading, error text. `--caution` colours an icon only, never a fill.
-- The four `--b-*` colours each stand for one total, on every mark of that total and on nothing else: its swatch, its rule, its size bars, its meter segment. `--b-now` frees now, `--b-trash` after the Trash is emptied, `--b-shown` shown only, `--b-macos` macOS-managed. They hold apart for every pair, also under protanopia and deuteranopia, only at these values: a change to one is checked against the other three in both themes.
+- The five `--b-*` colours each stand for one total, on every mark of that total and on nothing else: its swatch, its rule, its size bars, its meter segment. `--b-now` frees now, `--b-trash` after the Trash is emptied, `--b-export` kept as tarballs until they are deleted (a docker volume's export; it appears only when a scan or plan holds one), `--b-shown` shown only, `--b-macos` macOS-managed. They hold apart for every pair, also under protanopia and deuteranopia, only at these values: a change to one is checked against the other four in both themes. `--b-export` was added by that check: simulated with the Machado matrices, its CIE76 distance to each other colour is at least 36 in the light theme and 39 in the dark one under protanopia and deuteranopia, where the closest pair of the other four is 13.8 (`--b-trash` and `--b-macos`, deuteranopia, light).
 - `--taken`, `--purge` and `--track` draw the disk meter: taken, purgeable, free.
 - Every surface is flat `--paper`. `--panel` fills only the tray and a notice; `--accent-soft` only a row that arrived a moment ago, a finished step, and the plan's group whose action is running.
 
@@ -66,7 +66,7 @@ A size is the figure and its unit set apart: the unit at regular weight in `--in
 1. **Top bar**: the name, the scan's status in words, one action on the right ("Scan again"; while scanning, a progress bar and "Stop"). Empty on the plan and confirm steps.
 2. **Headline**: with a forecast, when the disk fills at the recent pace; without one, free space of the total, and a line under the meter saying why there is no forecast.
 3. **Disk meter**: 6px, three segments with 2px gaps, then the figures in words: free, purgeable, swap.
-4. **Four totals**, side by side: a 4px rule filled against the largest of the four, the figure, a swatch and a label saying when the space comes back. They are never added up, and a line under them says so. While a scan runs each reads "pending".
+4. **Four totals**, side by side, and a fifth, the volume exports, only when the scan holds a docker volume: a 4px rule filled against the largest of them, the figure, a swatch and a label saying when the space comes back. They are never added up, and a line under them says so. While a scan runs each reads "pending".
 5. **Notice** (Full Disk Access off): one `--panel` row, a lock icon, a sentence, its action on the right.
 6. **Sections**, in this order, each only when it has rows: Not scanned, Safe to clear, Your call, Only shown. A header is the title, a count in words, and on the right the bar scale or a link.
 7. **Tray**: the three steps (Findings, Plan, Confirm) as numbered circles, a sentence on where things stand, the next action as the one filled button. On the findings, the sentence counts what is ticked, the skips its plan would have, and what that frees, by total.
@@ -96,7 +96,7 @@ A 6px bar on a 1px `--line-strong` hairline the full width of its column; the fi
 ## Wording
 
 - Sizes as `engine.HumanBytes` prints them.
-- Say when space comes back, in plain words: "frees now", "after the Trash is emptied", "shown only", "macOS reclaims it by itself".
+- Say when space comes back, in plain words: "frees now", "after the Trash is emptied", "kept as tarballs until you delete them", "shown only", "macOS reclaims it by itself".
 - Ages: today, yesterday, N days ago, N months ago.
 - The home folder is written `~`, except in a command the owner is told to paste into Terminal and in a tool's own error text, which stay as written. A command or path wraps at a space or after a slash, never inside a name; the exact command is in the element's `title`.
 

@@ -845,7 +845,7 @@ func checkPageTranscript(t *testing.T, lines []string) {
 	for _, l := range findings {
 		buckets[l.Bucket] = true
 	}
-	need("scan", "a finding in each of the four buckets", len(buckets) == 4)
+	need("scan", "a finding in each of the five buckets", len(buckets) == 5)
 	need("scan", "a safe whole-rule command over 50 GiB", count(func(l pageLine) bool { return wholeRule(l) && l.Finding.TotalBytes() > 50<<30 }) == 1)
 	need("scan", "several safe whole-rule commands under 1 GiB", count(func(l pageLine) bool { return wholeRule(l) && l.Finding.TotalBytes() < 1<<30 }) >= 3)
 	need("scan", "a safe rule that needs administrator rights", count(func(l pageLine) bool {
@@ -951,7 +951,7 @@ func checkPageTranscript(t *testing.T, lines []string) {
 	need("plan-all", "Empty Trash first", len(all.Plan.Actions) > 0 && all.Plan.Actions[0].EmptiesTrash)
 	need("plan-all", "an action that takes an unselected item with it", includes == 1)
 	need("plan-all", "actions with a pre_action", preActions == 3)
-	need("plan-all", "bytes that free now and bytes that go to the Trash", all.Totals != nil && all.Totals.FreesNow > 0 && all.Totals.AfterTrash > 0)
+	need("plan-all", "bytes that free now, bytes that go to the Trash and bytes kept in volume exports", all.Totals != nil && all.Totals.FreesNow > 0 && all.Totals.AfterTrash > 0 && all.Totals.Exported > 0)
 
 	// The runs.
 	type run struct {

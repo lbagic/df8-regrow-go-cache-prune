@@ -5,6 +5,7 @@ package engine
 type Totals struct {
 	FreesNow     int64 `json:"frees_now"`     // steward commands: freed as they run
 	AfterTrash   int64 `json:"after_trash"`   // moved to the Trash: freed once it is emptied
+	Exported     int64 `json:"exported"`      // docker volumes removed after an export: the tarball keeps the room until it is deleted
 	ShownOnly    int64 `json:"shown_only"`    // surface-only: regrow never deletes it
 	MacOSManaged int64 `json:"macos_managed"` // phantom space macOS reclaims on its own
 	Partial      int   `json:"partial"`       // items whose bytes are lower bounds
@@ -64,18 +65,23 @@ func (l Ledger) Share(f Finding) int64 {
 const (
 	BucketFreesNow     = "frees_now"
 	BucketAfterTrash   = "after_trash"
+	BucketExported     = "exported"
 	BucketShownOnly    = "shown_only"
 	BucketMacOSManaged = "macos_managed"
 )
 
 // Bucket is the total rule r's bytes are counted in. Phantom space
-// comes first: macOS manages it whatever command the rule carries.
+// comes first: macOS manages it whatever command the rule carries. A
+// command that exports first keeps a tarball in regrow staging as large
+// as what it removes, so its bytes are not free until the tarball goes.
 func Bucket(r Rule) string {
 	switch {
 	case r.Category == CategoryPhantomSpace:
 		return BucketMacOSManaged
 	case !r.Risk.Actionable():
 		return BucketShownOnly
+	case len(r.NativeCommand) > 0 && r.PreAction == PreActionVolumeExport:
+		return BucketExported
 	case len(r.NativeCommand) > 0 || r.Prune != nil:
 		return BucketFreesNow
 	default:
@@ -92,6 +98,8 @@ func (t *Totals) add(r Rule, n int64) {
 		t.ShownOnly += n
 	case BucketFreesNow:
 		t.FreesNow += n
+	case BucketExported:
+		t.Exported += n
 	default:
 		t.AfterTrash += n
 	}

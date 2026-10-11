@@ -12,7 +12,7 @@
   --accent: #1e6a45; --accent-soft: #ddebdf; --on-accent: #ffffff;
   --caution: #9a5b00; --danger: #b3261e; --on-danger: #ffffff;
   --taken: #7b887f; --purge: #b3beb5; --track: #e2e7df;
-  --b-now: #3280de; --b-trash: #039868; --b-shown: #4a3ba8; --b-macos: #da6e97;
+  --b-now: #3280de; --b-trash: #039868; --b-export: #c2780f; --b-shown: #4a3ba8; --b-macos: #da6e97;
   --serif: ui-serif, "New York", Georgia, serif;
   --sans: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
@@ -24,7 +24,7 @@
     --accent: #78c79a; --accent-soft: #1f3327; --on-accent: #0e1a12;
     --caution: #e0a84a; --danger: #f08a80; --on-danger: #2a0f0c;
     --taken: #8d9a90; --purge: #56625a; --track: #2a322c;
-    --b-now: #4795f4; --b-trash: #30ac7d; --b-shown: #6456b5; --b-macos: #b53266;
+    --b-now: #4795f4; --b-trash: #30ac7d; --b-export: #d98f2e; --b-shown: #6456b5; --b-macos: #b53266;
   }
 }
 :root[data-theme="dark"] {
@@ -34,7 +34,7 @@
   --accent: #78c79a; --accent-soft: #1f3327; --on-accent: #0e1a12;
   --caution: #e0a84a; --danger: #f08a80; --on-danger: #2a0f0c;
   --taken: #8d9a90; --purge: #56625a; --track: #2a322c;
-  --b-now: #4795f4; --b-trash: #30ac7d; --b-shown: #6456b5; --b-macos: #b53266;
+  --b-now: #4795f4; --b-trash: #30ac7d; --b-export: #d98f2e; --b-shown: #6456b5; --b-macos: #b53266;
 }
 :root[data-theme="light"] { color-scheme: light; }
 
@@ -42,7 +42,7 @@
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--paper); color: var(--ink); font: 13px/1.4 var(--sans);
-  display: grid; grid-template: 42px minmax(0, 1fr) 60px / minmax(0, 1fr); overflow: hidden;
+  display: grid; grid-template: 42px minmax(0, 1fr) minmax(60px, auto) / minmax(0, 1fr); overflow: hidden;
   -webkit-font-smoothing: antialiased; cursor: default; -webkit-user-select: none;
 }
 h1, h2, h3, h4, p, dl, dd, ol { margin: 0; padding: 0; }
@@ -61,6 +61,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 /* one colour per total, on every mark that stands for it */
 .frees_now { background: var(--b-now); }
 .after_trash { background: var(--b-trash); }
+.exported { background: var(--b-export); }
 .shown_only { background: var(--b-shown); }
 .macos_managed { background: var(--b-macos); }
 .taken { background: var(--taken); }
@@ -94,8 +95,8 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 .figures b { color: var(--ink); font-weight: 650; }
 .aside { margin-top: 7px; color: var(--ink-2); font-size: 12px; }
 
-/* the four totals: a filled track, since these four have a scale of their own */
-.four { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-top: 16px; }
+/* the totals: a filled track, since they have a scale of their own; four, and a fifth when a scan holds a volume export */
+.four { display: grid; gap: 20px; margin-top: 16px; }
 .four .rule { height: 4px; background: var(--track); border-radius: 2px; }
 .four .rule i { display: block; height: 100%; min-width: 3px; border-radius: 2px; }
 .four b { display: block; font-size: 20px; font-weight: 650; letter-spacing: -.015em; margin-top: 7px; line-height: 1.15; font-variant-numeric: tabular-nums; }
@@ -171,7 +172,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin: 0; width: 15px; he
 .steps li.on i { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .steps li.was i { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
 .steps li + li::before { content: ""; width: 16px; height: 1px; background: var(--line-strong); margin-right: 2px; }
-.tray .say { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+.tray .say { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; padding: 4px 0; }
 .tray .say b { display: block; color: var(--ink); font-weight: 650; }
 .pick { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; white-space: nowrap; }
 .say b .pick { margin: 0 0 0 12px; font-weight: 400; color: var(--ink-2); vertical-align: bottom; }
@@ -288,7 +289,7 @@ function newPlan(e) {
     g.bytes += a.bytes || 0;
   }
   return { id: e.plan_id, expires: time(e.expires_at), actions, groups, skipped: e.plan.skipped || [], totals: e.totals,
-    commands: actions.filter((a) => a.kind !== 'trash').length, sent: false };
+    commands: actions.filter((a) => a.kind !== 'trash').length, exports: actions.filter((a) => a.kind === 'native' && a.pre_action === 'docker-volume-export').length, sent: false };
 }
 
 // ---------- the bridge: requests out, events in ----------
@@ -482,6 +483,7 @@ const act = {
 const BUCKET = { // a total's label, and what a row says about when its space comes back
   frees_now: ['frees now, as commands run', 'frees now'],
   after_trash: ['free after you empty the Trash', 'after the Trash is emptied'],
+  exported: ['kept as tarballs until you delete them', 'in a tarball until you delete it'],
   shown_only: ['shown only, never deleted', 'shown only'],
   macos_managed: ['macOS reclaims it by itself', 'macOS reclaims it by itself'],
 };
@@ -681,12 +683,12 @@ function lead() {
 }
 
 function four() {
-  const t = S.scan.totals, stopped = S.scan.phase === 'canceled', names = Object.keys(BUCKET);
+  const t = S.scan.totals, stopped = S.scan.phase === 'canceled', names = Object.keys(BUCKET).filter((b) => b !== 'exported' || (t && t.exported > 0));
   const max = t ? Math.max(1, ...names.map((b) => t[b] || 0)) : 1;
-  return h`<section class="four">${names.map((b) => h`<div class="t" data-bucket="${b}">
+  return h`<section class="four" style="grid-template-columns:repeat(${names.length}, minmax(0, 1fr))">${names.map((b) => h`<div class="t" data-bucket="${b}">
       <div class="rule">${t ? h`<i class="${b}" style="width:${((t[b] || 0) / max * 100).toFixed(1)}%"></i>` : ''}</div>
       ${t ? h`<b>${size(t[b] || 0)}</b>` : h`<b class="wait">${stopped ? 'not counted' : 'pending'}</b>`}<span class="name"><i class="sw ${b}"></i>${BUCKET[b][0]}</span></div>`)}</section>
-    <p class="apart">${t ? 'Four totals, never added up: each comes back at a different time, or not at all.' : stopped ? 'The four totals are counted when a scan runs to its end.' : 'The four totals arrive when the scan ends.'}</p>`;
+    <p class="apart">${t ? `${names.length === 5 ? 'Five' : 'Four'} totals, never added up: each comes back at a different time, or not at all.` : stopped ? 'The four totals are counted when a scan runs to its end.' : 'The four totals arrive when the scan ends.'}</p>`;
 }
 
 // "Safe to clear" as one line: the six largest by name, the rest counted.
@@ -707,6 +709,7 @@ function entry(v, scale, fresh, small) {
   const open = S.open.has('r' + row.n), each = !!row.select && !row.whole;
   const kept = rule.risk !== 'safe' && rule.risk !== 'caution';
   const runs = row.bucket === 'after_trash' ? 'Goes to the Trash; regrow undo restores it.'
+    : row.bucket === 'exported' ? h`Runs <span class="mono">${unbroken(shellJoin(rule.native_command))}</span> after a tarball goes to regrow staging, no undo.`
     : row.bucket !== 'frees_now' ? '' : rule.native_command ? h`Runs <span class="mono">${unbroken(shellJoin(rule.native_command))}</span>, no undo.` : 'A command frees it, with no undo.';
   const count = v.items.length > 1 ? h`<button class="link count" data-do="open" data-key="r${row.n}" id="o${row.n}" aria-expanded="${String(open)}">${ICON.open}${each ? v.picked + ' of ' : ''}${num(v.items.length, v.items[0].path ? 'folder' : 'item')}</button>` : '';
   return h`<div class="entry ${row.select ? '' : 'plain'} ${small ? 'small' : ''} ${fresh ? 'fresh' : ''}" data-rule="${row.id}">
@@ -728,15 +731,15 @@ function item(row, it, each, scale) {
 }
 
 function drawPlan() {
-  const p = S.plan, hr = S.scan.headroom, t = p.totals, cmds = p.commands, moves = p.actions.length - cmds;
+  const p = S.plan, hr = S.scan.headroom, t = p.totals, vols = p.exports, cmds = p.commands - vols, moves = p.actions.length - p.commands;
   return h`<section class="lead"><h2>${p.actions.length ? `The plan: ${num(p.actions.length, 'action')}, nothing has run yet.` : 'The plan: nothing to run.'}</h2>
       ${S.note ? h`<p class="aside">${S.note}</p>` : ''}
-      <p class="say">${cmds ? h`<i class="sw frees_now"></i><b>${human(t.frees_now)}</b> comes back as ${num(cmds, 'command')} ${cmds === 1 ? 'runs; it has' : 'run; they have'} no undo. ` : ''}${moves ? h`<i class="sw after_trash"></i><b>${human(t.after_trash)}</b> goes to the Trash in ${num(moves, 'move')} and is free once you empty it; until then regrow undo restores it.` : ''}</p>
+      <p class="say">${cmds ? h`<i class="sw frees_now"></i><b>${human(t.frees_now)}</b> comes back as ${num(cmds, 'command')} ${cmds === 1 ? 'runs; it has' : 'run; they have'} no undo. ` : ''}${moves ? h`<i class="sw after_trash"></i><b>${human(t.after_trash)}</b> goes to the Trash in ${num(moves, 'move')} and is free once you empty it; until then regrow undo restores it. ` : ''}${vols ? h`<i class="sw exported"></i><b>${human(t.exported)}</b> is ${num(vols, 'docker volume')} removed after a tarball of ${vols === 1 ? 'it' : 'each'} goes to regrow staging; the ${vols === 1 ? 'tarball keeps' : 'tarballs keep'} that room until you delete ${vols === 1 ? 'it' : 'them'}, and regrow undo does not restore a volume.` : ''}</p>
       ${hr ? h`${meter(hr, t.frees_now, t.after_trash)}<div class="figures"><span><b>${human(hr.free + t.frees_now)}</b> free once the commands end, up from ${human(hr.free)} now</span></div>` : ''}</section>
     ${notices(false)}
     ${p.skipped.length ? section('Skipped', `${p.skipped.length} ticked ${p.skipped.length === 1 ? 'finding' : 'findings'} the plan cannot run`, '',
       p.skipped.map((s) => h`<div class="act skip">${ICON.caution}<div><h4>${titleOf(s.rule_id)}</h4>${s.item_key ? h`<span class="ln mono">${unbroken(tilde(s.item_key))}</span>` : ''}<p>${sentence(s.reason)}</p></div></div>`)) : ''}
-    ${p.actions.length ? section('In the order they run', `${num(cmds, 'command')} and ${num(moves, 'move')} to the Trash`, tellActions(p), actions('plan')) : ''}`;
+    ${p.actions.length ? section('In the order they run', `${num(p.commands, 'command')} and ${num(moves, 'move')} to the Trash`, tellActions(p), actions('plan')) : ''}`;
 }
 
 // An action as it is read: the path a move takes, or the command; the home folder as ~.
@@ -763,13 +766,13 @@ function actions(mode) {
         ${first.pre_action ? h`<span class="sub">First, ${FIRST[first.pre_action] || h`the check <span class="mono">${first.pre_action}</span> runs`}.</span>` : ''}
         ${g.actions.flatMap((a) => a.includes || []).map((x) => h`<span class="sub"><b>Also removes</b> <span class="mono">${unbroken(tilde(x.id))}</span> (${human(x.bytes)})</span>`)}
         ${[...new Set(states.filter((s) => s.state === 'skipped').map((s) => s.error))].map((why) => h`<span class="sub"><b>Skipped:</b> ${sentence(why)}</span>`)}</div>
-      <div class="side">${bar(g.bytes, trash ? 'after_trash' : 'frees_now', scale)}<b>${size(g.bytes)}</b>
+      <div class="side">${bar(g.bytes, trash ? 'after_trash' : first.pre_action === 'docker-volume-export' ? 'exported' : 'frees_now', scale)}<b>${size(g.bytes)}</b>
         ${mode !== 'plan' ? h`<span class="when ${kinds.includes('fail') ? 'bad' : ''}">${tally}</span>` : trash ? h`<span class="when">${ICON.undo}undo restores</span>` : h`<span class="when">no undo</span>`}</div></div>`;
   });
 }
 
 function drawConfirm() {
-  const p = S.plan, t = p.totals, cmds = p.commands, moves = p.actions.length - cmds, run = `Run ${num(p.actions.length, 'action')}`;
+  const p = S.plan, t = p.totals, vols = p.exports, cmds = p.commands - vols, moves = p.actions.length - p.commands, run = `Run ${num(p.actions.length, 'action')}`;
   const names = [...new Set(p.skipped.map((s) => titleOf(s.rule_id)))];
   const trash = S.automation === 'asking' ? h`<b>${num(moves, 'move')} to the Trash.</b> Asking macOS whether regrow may control Finder, which makes the moves; the button stays locked until it answers.`
     : S.automation === 'denied' ? h`<b>${num(moves, 'move')} to regrow staging.</b> regrow may not control Finder, so the moves land in regrow staging: regrow undo restores them, and emptying the Trash does not free them.`
@@ -777,8 +780,9 @@ function drawConfirm() {
   return h`<section class="ask"><h2>${run}?</h2><dl>
       ${cmds ? h`<dt><i class="sw frees_now"></i>${size(t.frees_now)}</dt><dd><b>${num(cmds, 'command')} with no undo.</b> The space is free as ${cmds === 1 ? 'it runs, and what it deletes' : 'they run, and what they delete'} comes back only by regrowing.${p.actions.some((a) => a.empties_trash) ? `${cmds === 1 ? ' It' : ' One of them'} empties the Trash: what is in it now is gone for good.` : ''}</dd>` : ''}
       ${moves ? h`<dt><i class="sw after_trash"></i>${size(t.after_trash)}</dt><dd>${trash}</dd>` : ''}
+      ${vols ? h`<dt><i class="sw exported"></i>${size(t.exported)}</dt><dd><b>${num(vols, 'docker volume')} removed, with no undo.</b> ${vols === 1 ? 'It is' : 'Each is'} exported to a tarball in regrow staging first, which keeps that room until you delete it; regrow undo does not restore a volume.</dd>` : ''}
       ${names.length ? h`<dt><i class="sw"></i>${p.skipped.length} skipped</dt><dd>Left as ${names.length === 1 ? 'it is' : 'they are'}: ${names.join(', ')}. The plan says why.</dd>` : ''}</dl>
-    <div class="gate"><label><input type="checkbox" id="read" ${S.read ? 'checked' : ''}><span>${cmds ? `I read the ${num(cmds, 'command')}. ${cmds === 1 ? 'It has' : 'They have'} no undo.` : 'I read the plan. Every action in it is a move that regrow undo puts back.'}</span></label>
+    <div class="gate"><label><input type="checkbox" id="read" ${S.read ? 'checked' : ''}><span>${p.commands ? `I read the ${num(p.commands, 'command')}. ${p.commands === 1 ? 'It has' : 'They have'} no undo.` : 'I read the plan. Every action in it is a move that regrow undo puts back.'}</span></label>
       <button class="btn run" id="go" data-do="run" ${S.read && settled(p) ? '' : 'disabled'}>${run}</button></div>
     <p class="fine">Return does nothing here. The plan can run once, ${within(p)}.</p></section>`;
 }
@@ -859,7 +863,7 @@ function drawTray() {
   } else {
     const t = S.tray;
     say = h`<b>${num(sc.rows.filter((r) => (r.select || []).some((a) => S.ticked.has(a))).length, 'finding')} ticked${t && t.skipped.length ? h`<span class="pick">${ICON.caution}${t.skipped.length} skipped</span>` : ''}</b>${!t ? (t === null ? 'counting what that frees' : '') : h`
-      <span class="pick"><i class="sw frees_now"></i>${human(t.totals.frees_now)} frees now</span><span class="pick"><i class="sw after_trash"></i>${human(t.totals.after_trash)} after the Trash is emptied</span>`}`;
+      <span class="pick"><i class="sw frees_now"></i>${human(t.totals.frees_now)} frees now</span><span class="pick"><i class="sw after_trash"></i>${human(t.totals.after_trash)} after the Trash is emptied</span>${t.totals.exported ? h`<span class="pick"><i class="sw exported"></i>${human(t.totals.exported)} in volume exports</span>` : ''}`}`;
     buttons = h`<button class="btn" data-do="review" id="next" ${S.planning || !S.ticked.size ? 'disabled' : ''}>${S.planning ? 'Planning' : 'Review plan'}</button>`;
   }
   return h`<ol class="steps">${['Findings', 'Plan', 'Confirm'].map((name, i) => h`<li class="${i === step ? 'on' : step == null || i < step ? 'was' : ''}"><i>${i + 1}</i>${name}</li>`)}</ol>

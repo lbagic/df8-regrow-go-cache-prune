@@ -70,12 +70,12 @@ A Finding is `{"rule": Rule, "items": [Item], "error": "…"}`; `error` is set o
 Totals, in `summary` and `plan`, split bytes by when they become free space:
 
 ```json
-{"frees_now":0,"after_trash":0,"shown_only":0,"macos_managed":0,"partial":0}
+{"frees_now":0,"after_trash":0,"exported":0,"shown_only":0,"macos_managed":0,"partial":0}
 ```
 
-`frees_now` is freed as steward commands run; `after_trash` only once the Trash is emptied; `shown_only` is surface-only and never deleted; `macos_managed` is phantom space macOS reclaims itself. `partial` counts items whose bytes are lower bounds.
+`frees_now` is freed as steward commands run; `after_trash` only once the Trash is emptied; `exported` is a docker volume removed after its export, whose tarball keeps about as much room in regrow's staging directory until it is deleted; `shown_only` is surface-only and never deleted; `macos_managed` is phantom space macOS reclaims itself. `partial` counts items whose bytes are lower bounds.
 
-A finding's `bucket` is the name of one of the four: `frees_now`, `after_trash`, `shown_only` or `macos_managed`. It is always present, and it is the bucket the `summary` counted the rule's items in, so a peer never works it out from the rule.
+A finding's `bucket` is the name of one of the five: `frees_now`, `after_trash`, `exported`, `shown_only` or `macos_managed`. It is always present, and it is the bucket the `summary` counted the rule's items in, so a peer never works it out from the rule.
 
 A finding's `select` lists the atoms that tick its row, in item order. A peer that lets the owner pick sends only atoms it was given here:
 
@@ -96,7 +96,7 @@ A finding's `select` lists the atoms that tick its row, in item order. A peer th
 
 | Event | Fields |
 |---|---|
-| `plan` | `plan_id`; `expires_at`; `select`; `plan`: `{actions, skipped}`; `totals` (`frees_now` and `after_trash` are filled) |
+| `plan` | `plan_id`; `expires_at`; `select`; `plan`: `{actions, skipped}`; `totals` (`frees_now`, `after_trash` and `exported` are filled) |
 | `done` | — |
 
 The event's `select` is the atoms the plan was built from, sorted: the request's own, or the default selection when the request sent none, which is how a peer learns what starts ticked. The default selection names a rule read in full by its rule id, also where the finding's `select` lists item ids: the rule id stands for all of them. `expires_at` is an RFC 3339 time, the wall-clock moment after which an `execute` of this plan answers `plan_expired`; an execute at that moment still runs.

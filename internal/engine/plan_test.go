@@ -385,10 +385,12 @@ func TestPlanTotalsSplitByKind(t *testing.T) {
 		{Kind: ActionTrash, Bytes: 100},
 		{Kind: ActionNative, Bytes: 20},
 		{Kind: ActionTrash, Bytes: 3},
+		{Kind: ActionNative, Bytes: 7, PreAction: PreActionVolumeExport},
+		{Kind: ActionNative, Bytes: 5, PreAction: PreActionAgentScratchRecheck},
 	}}
 	got := p.Totals()
-	if got.FreesNow != 20 || got.AfterTrash != 103 {
-		t.Fatalf("Totals = %+v, want FreesNow 20, AfterTrash 103", got)
+	if got.FreesNow != 25 || got.AfterTrash != 103 || got.Exported != 7 {
+		t.Fatalf("Totals = %+v, want FreesNow 25 (a hook that is not the volume export frees as the command runs), AfterTrash 103, Exported 7", got)
 	}
 }
 

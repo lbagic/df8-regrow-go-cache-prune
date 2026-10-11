@@ -67,3 +67,48 @@ func TestTotalsLinesSplitByWhenSpaceReturns(t *testing.T) {
 		t.Errorf("after-trash line = %q", lines[1])
 	}
 }
+
+func TestTotalsLinesKeepAVolumeExportApart(t *testing.T) {
+	plan := engine.Plan{Actions: []engine.Action{
+		{Kind: engine.ActionNative, Bytes: 3 << 30},
+		{Kind: engine.ActionTrash, Bytes: 1 << 30},
+		{Kind: engine.ActionNative, Bytes: 5 << 30, PreAction: engine.PreActionVolumeExport},
+	}}
+	lines := TotalsLines(plan)
+	if len(lines) != 3 {
+		t.Fatalf("want the two subtotal lines and the volume exports, got %q", lines)
+	}
+	if !strings.HasPrefix(lines[0], "Frees now") || !strings.Contains(lines[0], "3.0 GiB") {
+		t.Errorf("frees-now line = %q: a volume removal is not freed as it runs", lines[0])
+	}
+	if !strings.HasPrefix(lines[2], "Volume exports") || !strings.Contains(lines[2], "5.0 GiB") || !strings.Contains(lines[2], "until you delete") {
+		t.Errorf("volume exports line = %q", lines[2])
+	}
+}
+
+func TestLedgerLinesKeepAVolumeExportApart(t *testing.T) {
+	with := strings.Join(LedgerLines(engine.Totals{FreesNow: 3 << 30, Exported: 5 << 30}), "\n")
+	for _, l := range strings.Split(with, "\n") {
+		if strings.Contains(l, "Frees now") && !strings.Contains(l, "3.0 GiB") {
+			t.Errorf("frees-now line = %q", l)
+		}
+	}
+	if !strings.Contains(with, "Volume exports") || !strings.Contains(with, "5.0 GiB") {
+		t.Errorf("the ledger must show the volume exports, got:\n%s", with)
+	}
+	if without := strings.Join(LedgerLines(engine.Totals{FreesNow: 3 << 30}), "\n"); strings.Contains(without, "Volume exports") {
+		t.Errorf("a scan with no volume to export shows no export line, got:\n%s", without)
+	}
+}
+
+func TestLedgerLinesOfTheTUIFitEightyColumns(t *testing.T) {
+	lines := ledgerLines(engine.Totals{FreesNow: 999 << 30, AfterTrash: 999 << 30, Exported: 999 << 30, ShownOnly: 999 << 30, MacOSManaged: 999 << 30, Partial: 12})
+	for _, l := range lines {
+		if n := len([]rune("  " + l)); n > 80 {
+			t.Errorf("ledger line %q is %d columns, want at most 80", l, n)
+		}
+	}
+	if !strings.Contains(lines[0], "volume exports 999.0 GiB") {
+		t.Errorf("the TUI's ledger must show the volume exports, got %q", lines)
+	}
+}

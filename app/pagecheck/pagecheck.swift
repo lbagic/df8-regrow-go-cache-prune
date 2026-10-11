@@ -637,8 +637,15 @@ struct Scenario {
             let t = r.transcript
             await results(r)
             let summary = t.event("scan", "summary").obj("totals"), plan = t.event("plan-default", "plan")
-            let buckets = ["frees_now", "after_trash", "shown_only", "macos_managed"]
-            r.same(await r.texts(".four b"), buckets.map { human(summary.int($0)) }, "the four totals")
+            let buckets = ["frees_now", "after_trash", "exported", "shown_only", "macos_managed"]
+            r.expect(summary.int("exported") > 0, "the fixture scan holds a volume")
+            r.same(await r.texts(".four b"), buckets.map { human(summary.int($0)) }, "the five totals")
+            r.has(await r.text(".apart"), "Five totals, never added up", "the note under the totals")
+            r.same(await r.count(".four .t"), 5, "the totals drawn")
+            r.same(await r.js("return getComputedStyle(document.querySelector('.four')).gridTemplateColumns.split(' ').length") as? Int ?? 0, 5, "the columns of the totals")
+            let volumeRow = await r.text(".entry[data-rule=docker-volumes-named]")
+            r.has(volumeRow, "after a tarball goes to regrow staging, no undo", "what the volume row says it runs")
+            r.has(volumeRow, "in a tarball until you delete it", "when the volume row's space comes back")
             let days = t.event("tick", "tick")["days_to_full"] as? Double ?? 0
             r.has(await r.text(".lead h2"), "full in about \(Int(days.rounded())) day", "the headline")
             // The engine's own alert prints the same free space: the page's figure must read as it does.
@@ -655,6 +662,7 @@ struct Scenario {
             r.has(tray, "\(rules) findings ticked", "the tray")
             r.has(tray, human(plan.obj("totals").int("frees_now")) + " frees now", "the tray")
             r.has(tray, human(plan.obj("totals").int("after_trash")) + " after the Trash is emptied", "the tray")
+            r.expect(plan.obj("totals").int("exported") == 0 && !tray.contains("volume exports"), "the tray names volume exports when the default plan has none")
             r.has(tray, "\(plan.obj("plan").objs("skipped").count) skipped", "the tray")
             let named = await r.count(".fold [data-rule]"), entries = await r.count(".entry")
             let more = Int(await r.js("return (document.querySelector('.fold .rest') || {dataset: {}}).dataset.more || '0'") as? String ?? "") ?? 0
@@ -796,7 +804,12 @@ struct Scenario {
             r.same(await r.text(".top .status"), "", "the top bar's status on the plan")
             r.same(await r.count(".top button"), 0, "actions in the top bar on the plan")
             let lead = await r.text(".lead .say")
-            r.has(lead, human(totals.int("frees_now")) + " comes back as \(actions.filter { $0.str("kind") != "trash" }.count) commands run", "the lead")
+            let volumes = actions.filter { $0.str("kind") == "native" && $0.str("pre_action") == "docker-volume-export" }.count
+            r.expect(volumes > 0 && totals.int("exported") > 0, "the plan holds volumes")
+            r.has(lead, human(totals.int("frees_now")) + " comes back as \(actions.filter { $0.str("kind") != "trash" }.count - volumes) commands run", "the lead")
+            r.has(lead, human(totals.int("exported")) + " is \(volumes) docker volumes removed after a tarball of each goes to regrow staging", "the lead")
+            r.has(lead, "regrow undo does not restore a volume", "the lead")
+            r.same(await r.js("return document.querySelector('.act[data-rule=docker-volumes-named] .bar i').className") as? String ?? "", "exported", "the colour of a volume's bar")
             r.has(lead, human(totals.int("after_trash")) + " goes to the Trash in \(actions.filter { $0.str("kind") == "trash" }.count) moves", "the lead")
             let headroom = t.event("scan", "headroom")
             r.has(await r.text(".lead .figures"), human(headroom.int("free") + totals.int("frees_now")) + " free once the commands end, up from " + human(headroom.int("free")), "the meter's figure")
@@ -859,6 +872,9 @@ struct Scenario {
             let actions = r.transcript.event("plan-all", "plan").obj("plan").objs("actions")
             r.same(r.sentShell("automation"), 1, "automation questions on entering the confirm step")
             r.has(await r.text(".ask dl"), "Asking macOS whether regrow may control Finder", "the Trash line while the answer is out")
+            let exports = r.transcript.event("plan-all", "plan").obj("totals").int("exported"), volumes = actions.filter { $0.str("pre_action") == "docker-volume-export" }.count
+            r.has(await r.text(".ask dl"), human(exports) + "\(volumes) docker volumes removed, with no undo.", "the volume line")
+            r.has(await r.text(".ask dl"), "regrow undo does not restore a volume", "the volume line")
             let tries: @MainActor () async -> Void = {
                 await r.click("#go")
                 await r.click("#go", force: true)
@@ -1091,6 +1107,16 @@ struct Scenario {
             r.same(await r.screen(), "findings", "the screen")
             let frees = human(r.transcript.event("plan-all", "plan").obj("totals").int("frees_now"))
             r.has(await r.text(".tray .say"), frees + " frees now", "the tray after the engine refused the review")
+            let exported = human(r.transcript.event("plan-all", "plan").obj("totals").int("exported"))
+            r.has(await r.text(".tray .say"), exported + " in volume exports", "the tray names the volume exports the ticks hold")
+            // The tray grows past 60 px for its lines on a narrow window (PAGECHECK_SIZE=720x520 draws one).
+            r.expect(await r.flag("""
+                const tray = document.querySelector('.tray').getBoundingClientRect();
+                return [...document.querySelectorAll('.tray > *')].every((el) => {
+                  const box = el.getBoundingClientRect();
+                  return box.top >= tray.top - 0.5 && box.bottom <= tray.bottom + 0.5;
+                });
+                """), "every part of the tray stays inside it")
             await r.shoot()
         },
         Scenario(name: "other-error") { r in
