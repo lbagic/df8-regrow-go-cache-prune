@@ -3,8 +3,8 @@
 # ~/.npm/_cacache only), and nothing else removes one. The npx-cache
 # query (internal/scanner/tool_npx.go) lists each folder, named by the
 # packages in it, and keeps a folder a running process works in or
-# names on its command line: a server npx started loads its modules as
-# it needs them.
+# names on its command line, and one npx ran in the last 7 days: a
+# server npx started loads its modules as it needs them.
 id: npx-cache
 title: npx package folders
 category: dev-caches

@@ -8,19 +8,28 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lbagic/regrow/internal/engine"
 )
 
 // npxFixture is a home whose ~/.npm/_npx holds the named folders, each
-// with a file in it, with no process running.
+// with a file in it, with no process running and a clock 30 days past
+// the moment the fixture was made.
 func npxFixture(t *testing.T, names ...string) (*npxCache, string) {
 	t.Helper()
 	home, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := &npxCache{w: testWalker(), dir: filepath.Join(home, npxCacheDir), procs: func(context.Context) (processes, error) { return processes{}, nil }}
+	now := time.Now().Add(30 * 24 * time.Hour)
+	n := &npxCache{
+		w:     testWalker(),
+		dir:   filepath.Join(home, npxCacheDir),
+		quiet: npxQuiet,
+		procs: func(context.Context) (processes, error) { return processes{}, nil },
+		now:   func() time.Time { return now },
+	}
 	for _, name := range names {
 		writeFile(t, filepath.Join(n.dir, name, "node_modules", "pkg", "index.js"), 5000)
 	}
@@ -28,7 +37,12 @@ func npxFixture(t *testing.T, names ...string) (*npxCache, string) {
 }
 
 func TestNpxCacheOffersFoldersNoProcessUses(t *testing.T) {
-	n, _ := npxFixture(t, "aaa", "bbb", "ccc", "ddd", "eee")
+	n, _ := npxFixture(t, "aaa", "bbb", "ccc", "ddd", "eee", "fff")
+	// npx's lock folder stamps the folder on every run.
+	ran := n.now().Add(-24 * time.Hour)
+	if err := os.Chtimes(filepath.Join(n.dir, "fff"), ran, ran); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(n.dir, "aaa", "package.json"), []byte(`{"_npx":{"packages":["create-vite@latest"]}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +80,7 @@ func TestNpxCacheOffersFoldersNoProcessUses(t *testing.T) {
 	if !reflect.DeepEqual(labels, wantLabels) {
 		t.Errorf("labels %q, want %q", labels, wantLabels)
 	}
-	wantKept := []keptNpx{{ccc, "a running process uses it"}, {ddd, "a running process uses it"}}
+	wantKept := []keptNpx{{ccc, "a running process uses it"}, {ddd, "a running process uses it"}, {filepath.Join(n.dir, "fff"), "npx ran it in the last 7 days"}}
 	if !reflect.DeepEqual(kept, wantKept) {
 		t.Errorf("kept %+v, want %+v", kept, wantKept)
 	}
@@ -123,6 +137,16 @@ func TestNpxRecheck(t *testing.T) {
 	}
 	if err := n.recheck(ctx, filepath.Join(home, ".npm", "_cacache")); err == nil {
 		t.Error("a folder outside the npx cache was allowed")
+	}
+	ran := n.now().Add(-time.Hour)
+	if err := os.Chtimes(aaa, ran, ran); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.recheck(ctx, aaa); err == nil || !strings.Contains(err.Error(), "npx ran it") {
+		t.Errorf("folder run since the scan: %v, want a refusal naming why", err)
+	}
+	if err := n.recheck(ctx, filepath.Join(n.dir, "gone")); err == nil {
+		t.Error("a folder that is gone was allowed")
 	}
 	n.procs = func(context.Context) (processes, error) { return processes{}, errors.New("ps: exit status 1") }
 	if err := n.recheck(ctx, aaa); err == nil {

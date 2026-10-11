@@ -138,6 +138,7 @@ func (f *downloadsFixture) zipFile(name string, entries map[string]string) strin
 
 func appZip(app, id, version string) map[string]string {
 	return map[string]string{
+		app + "/":                           "",
 		app + "/Contents/Info.plist":        infoPlist(id, version),
 		app + "/Contents/MacOS/" + app:      "binary",
 		"__MACOSX/" + app + "/._Info.plist": "resource fork",
@@ -177,9 +178,13 @@ func TestDownloadedInstallers(t *testing.T) {
 	f.app("~/Applications/Foo.app", "com.example.foo", "1.2.0", before)
 	f.app("/Applications/Bar.app", "com.example.bar", "1.0", after)
 	f.app("/Applications/Baz.app", "com.example.baz", "1.0", before)
+	f.app("/Applications/Auto.app", "com.example.auto", "4.1", after)
+	f.app("/Applications/Affinity Photo.app", "com.example.photo", "1.0", after)
+	f.app("/Applications/MyApp.app", "com.example.myapp", "1.0", after)
 
 	for _, name := range []string{"Docker.dmg", "Slack-4.41.105-macOS.dmg", "Slack-4.42.0-macOS.dmg", "ChatGPTInstaller.dmg", "Tool (1).DMG", "Figma.pkg",
-		"Minecraft.dmg", "1.0-arm64.dmg", "Recent.dmg", "NoDate.dmg", "notes.txt", "corrupt.zip"} {
+		"Minecraft.dmg", "1.0-arm64.dmg", "Recent.dmg", "NoDate.dmg", "notes.txt", "corrupt.zip",
+		"Auto.4.2.dmg", "Auto-4.1.dmg", "Affinity Photo 2.dmg"} {
 		f.file(name)
 	}
 	recent := f.now.Add(-24 * time.Hour)
@@ -207,6 +212,10 @@ func TestDownloadedInstallers(t *testing.T) {
 	f.zipFile("two.zip", two)
 	f.zipFile("other.zip", appZip("Other.app", "com.example.other", "1.0"))
 	f.zipFile("noplist.zip", map[string]string{"Odd.app/Contents/MacOS/Odd": "binary"})
+	build := appZip("MyApp.app", "com.example.myapp", "1.0")
+	build["MyApp.app.dSYM/Contents/Info.plist"] = "symbols"
+	build["notes.txt"] = "release notes"
+	f.zipFile("myapp-build-42.zip", build)
 
 	offered, kept := f.scan()
 	wantOffered := map[string]string{
@@ -216,6 +225,7 @@ func TestDownloadedInstallers(t *testing.T) {
 		"Tool (1).DMG":             "Tool (1).DMG · Tool.app",
 		"foo-same.zip":             "foo-same.zip · Foo.app",
 		"bar-beta.zip":             "bar-beta.zip · Bar.app",
+		"Auto-4.1.dmg":             "Auto-4.1.dmg · Auto.app",
 	}
 	if !reflect.DeepEqual(offered, wantOffered) {
 		t.Errorf("offered:\n%v\nwant:\n%v", offered, wantOffered)
@@ -235,6 +245,10 @@ func TestDownloadedInstallers(t *testing.T) {
 		"two.zip":                "it holds more than one app",
 		"other.zip":              "no installed app is com.example.other",
 		"noplist.zip":            "its app's Info.plist cannot be read",
+		"Auto.4.2.dmg":           "its name's version is newer than " + filepath.Join(apps, "Auto.app") + " (4.2 over 4.1)",
+		// A lone number names another app.
+		"Affinity Photo 2.dmg": "no installed app has its name",
+		"myapp-build-42.zip":   "it holds more than the app",
 	}
 	if !reflect.DeepEqual(kept, wantKept) {
 		t.Errorf("kept:\n%v\nwant:\n%v", kept, wantKept)
@@ -250,6 +264,94 @@ func TestDownloadedInstallersEveryCopyCounts(t *testing.T) {
 	offered, kept := f.scan()
 	if len(offered) != 0 || kept["Docker.dmg"] != "it arrived after "+old+" was installed" {
 		t.Fatalf("offered %v, kept %v; want Docker.dmg kept for the older copy", offered, kept)
+	}
+}
+
+// The download's own date added counts as a time it changed, and a
+// download that cannot be stat'd is kept.
+func TestDownloadedInstallersDownloadTimes(t *testing.T) {
+	f := newDownloadsFixture(t)
+	f.app("/Applications/Docker.app", "com.docker.docker", "4.40.0", f.made.Add(24*time.Hour))
+	f.app("/Applications/Slack.app", "com.tinyspeck.slackmacgap", "4.41.105", f.made.Add(24*time.Hour))
+	f.file("Slack.dmg")
+	f.installed[f.file("Docker.dmg")] = f.now.Add(-24 * time.Hour)
+	offered, kept := f.scan()
+	if len(offered) != 1 || offered["Slack.dmg"] == "" || kept["Docker.dmg"] != "it changed in the last 14 days" {
+		t.Fatalf("offered %v, kept %v; want Docker.dmg kept for its date added", offered, kept)
+	}
+	// Listing needs read, a stat needs search.
+	if err := os.Chmod(f.downloads(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(f.downloads(), 0o755) })
+	offered, kept = f.scan()
+	if len(offered) != 0 || kept["Slack.dmg"] != "it cannot be read" {
+		t.Fatalf("offered %v, kept %v; want Slack.dmg kept as unreadable", offered, kept)
+	}
+}
+
+// An installed app whose Info.plist cannot be read keeps what it could
+// be the copy of: a disk image whose name spells a version, a zip of
+// an app by its name.
+func TestDownloadedInstallersUnreadableInstalledPlist(t *testing.T) {
+	f := newDownloadsFixture(t)
+	slack := f.app("/Applications/Slack.app", "com.tinyspeck.slackmacgap", "4.41.105", f.made.Add(24*time.Hour))
+	if err := os.WriteFile(filepath.Join(slack, "Contents", "Info.plist"), []byte(`<plist><dict><key>CFBundleName</key><string>Slack</string></dict></plist>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.file("Slack-4.50.0-macOS.dmg")
+	f.app("/Applications/Foo.app", "com.example.foo", "1.2", f.made.Add(-24*time.Hour))
+	other := f.app("~/Applications/Foo.app", "com.example.foo", "9.0", f.made.Add(24*time.Hour))
+	if err := os.WriteFile(filepath.Join(other, "Contents", "Info.plist"), []byte("bplist00garbage"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.zipFile("foo.zip", appZip("Foo.app", "com.example.foo", "1.0"))
+	offered, kept := f.scan()
+	want := map[string]string{
+		"Slack-4.50.0-macOS.dmg": "the Info.plist of " + slack + " cannot be read, so its version cannot be compared with 4.50.0",
+		"foo.zip":                "the Info.plist of " + other + " cannot be read",
+	}
+	if len(offered) != 0 || !reflect.DeepEqual(kept, want) {
+		t.Fatalf("offered %v, kept %v; want %v", offered, kept, want)
+	}
+}
+
+// App folders are read through symlinks; one that cannot be read makes
+// the listing incomplete, and a dangling one is no app.
+func TestDownloadedInstallersSymlinkedApps(t *testing.T) {
+	f := newDownloadsFixture(t)
+	after := f.made.Add(24 * time.Hour)
+	f.app("/Applications/Docker.app", "com.docker.docker", "4.40.0", after)
+	tool := f.app("~/Linked/Tool.app", "com.example.tool", "1.0", after)
+	if err := os.Symlink(filepath.Dir(tool), f.host.ExpandPath("/Applications/Linked")); err != nil {
+		t.Fatal(err)
+	}
+	// getattrlist follows the link; the fixture's reader goes by path.
+	f.installed[f.host.ExpandPath("/Applications/Linked/Tool.app")] = after
+	if err := os.Symlink(f.host.ExpandPath("~/Gone.app"), f.host.ExpandPath("/Applications/Gone.app")); err != nil {
+		t.Fatal(err)
+	}
+	f.file("Docker.dmg")
+	f.file("Tool.dmg")
+	offered, kept := f.scan()
+	if len(offered) != 2 || len(kept) != 0 {
+		t.Fatalf("offered %v, kept %v; want both offered, Tool through the linked folder", offered, kept)
+	}
+
+	hidden := f.app("~/Hidden/Docker.app", "com.docker.docker", "4.30.0", f.made.Add(-24*time.Hour))
+	if err := os.MkdirAll(f.host.ExpandPath("~/Applications"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(hidden, f.host.ExpandPath("~/Applications/Docker.app")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Dir(hidden), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(hidden), 0o755) })
+	offered, kept = f.scan()
+	if len(offered) != 0 || kept["Docker.dmg"] != "the installed apps could not all be listed" {
+		t.Fatalf("offered %v, kept %v; want every download kept while a linked copy cannot be read", offered, kept)
 	}
 }
 
@@ -348,6 +450,7 @@ func TestNameKey(t *testing.T) {
 	for _, tc := range []struct{ name, want string }{
 		{"Docker", "docker"},
 		{"Slack-4.41.105-macOS", "slack"},
+		{"Foo.4.2", "foo"},
 		{"ChatGPTInstaller", "chatgpt"},
 		{"Google Chrome", "googlechrome"},
 		{"googlechrome", "googlechrome"},
@@ -357,7 +460,9 @@ func TestNameKey(t *testing.T) {
 		{"Flow-v1.5.339", "flow"},
 		{"Claude (1)", "claude"},
 		{"orca-macos-x86_64", "orca"},
-		{"1Password 8", "1password"},
+		{"1Password 8", "1password8"},
+		{"Affinity Photo 2", "affinityphoto2"},
+		{"Dev1.2", "dev12"},
 		{"Install macOS Sequoia", "sequoia"},
 		{"Setup", ""},
 		{"FooSetup", "foo"},
@@ -375,6 +480,8 @@ func TestNameVersion(t *testing.T) {
 	for _, tc := range []struct{ name, want string }{
 		{"Slack-4.41.105-macOS", "4.41.105"},
 		{"Flow-v1.5.339", "1.5.339"},
+		{"Foo.4.2", "4.2"},
+		{"Foo-4.2.0b1", "4.2.0"},
 		{"VLC-3.0.21-arm64", "3.0.21"},
 		{"Docker", ""},
 		{"Claude (1)", ""},

@@ -17,4 +17,4 @@ sudo: false
 beta: true
 fixture:
   files:
-    - ~/Library/Application Support/Google/Chrome/OptGuideOnDeviceModel/2025.8.8.1141/weights.bin
+    - ~/Library/Application Support/Google/Chrome/OptGuideOnDeviceModel/2025.1.2.3/weights.bin

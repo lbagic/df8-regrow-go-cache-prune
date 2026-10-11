@@ -25,9 +25,9 @@ import (
 // or .zip at the top of ~/Downloads is offered when it installs an app
 // in /Applications or ~/Applications, and every failure keeps it:
 //
-//   - a .zip is matched by what it holds: exactly one app at its top
-//     level, read from the archive's directory without extracting,
-//     whose bundle identifier an installed app carries;
+//   - a .zip is matched by what it holds: one app at its top level
+//     and nothing beside it, read from the archive's directory without
+//     extracting, whose bundle identifier an installed app carries;
 //   - a .dmg or .pkg cannot be read without mounting or expanding it,
 //     so it is matched by name: its file name, less versions,
 //     architectures and platform words, spells an installed app's;
@@ -38,8 +38,9 @@ import (
 //     place (the bundle's date added);
 //   - nothing about it changed for downloadsQuiet.
 //
-// Each installed copy of the app must pass, and when the apps cannot
-// all be listed every download is kept. The
+// Each installed copy of the app must pass, an installed app whose
+// Info.plist the judgement needs must be readable, and when the apps
+// cannot all be listed every download is kept. The
 // downloaded-installer-recheck pre-action runs the same judgement on
 // the one download right before it goes to the Trash.
 
@@ -222,7 +223,8 @@ func (d *downloadedInstallers) judgeOne(ctx context.Context, path string, apps [
 		return engine.Item{}, "", false
 	}
 	// The latest of every time the download reports: a download
-	// opened, moved into the folder or rewritten is a recent one.
+	// rewritten, moved into the folder or given new metadata is a
+	// recent one.
 	last := slices.MaxFunc(fileTimes(fi), time.Time.Compare)
 	if at, err := bounded(ctx, d.w, path, func() (time.Time, error) { return d.added(path) }); err == nil && at.After(last) {
 		last = at
@@ -235,13 +237,20 @@ func (d *downloadedInstallers) judgeOne(ctx context.Context, path string, apps [
 	var zipped *bundleInfo
 	named := ""
 	if strings.EqualFold(filepath.Ext(path), ".zip") {
-		info, why := d.zippedApp(ctx, path)
+		info, bundle, why := d.zippedApp(ctx, path)
 		if why != "" {
 			return engine.Item{}, why, true
 		}
 		zipped = &info
+		// An installed app whose Info.plist cannot be read could be a
+		// copy of the zipped one; its name is all that can tell.
+		bundleKey := nameKey(strings.TrimSuffix(bundle, filepath.Ext(bundle)))
 		for _, a := range apps {
-			if ai := d.appInfo(ctx, a, infos); ai != nil && strings.EqualFold(ai.id, info.id) {
+			ai := d.appInfo(ctx, a, infos)
+			switch {
+			case ai == nil && a.key == bundleKey:
+				return engine.Item{}, fmt.Sprintf("the Info.plist of %s cannot be read", a.path), true
+			case ai != nil && strings.EqualFold(ai.id, info.id):
 				matched = append(matched, a)
 			}
 		}
@@ -267,10 +276,12 @@ func (d *downloadedInstallers) judgeOne(ctx context.Context, path string, apps [
 
 	for _, a := range matched {
 		if named != "" {
-			if ai := d.appInfo(ctx, a, infos); ai != nil {
-				if c, ok := compareAppVersion(named, ai.version); ok && c > 0 {
-					return engine.Item{}, fmt.Sprintf("its name's version is newer than %s (%s over %s)", a.path, named, ai.version), true
-				}
+			ai := d.appInfo(ctx, a, infos)
+			if ai == nil {
+				return engine.Item{}, fmt.Sprintf("the Info.plist of %s cannot be read, so its version cannot be compared with %s", a.path, named), true
+			}
+			if c, ok := compareAppVersion(named, ai.version); ok && c > 0 {
+				return engine.Item{}, fmt.Sprintf("its name's version is newer than %s (%s over %s)", a.path, named, ai.version), true
 			}
 		}
 		if zipped != nil {
@@ -299,8 +310,9 @@ func (d *downloadedInstallers) judgeOne(ctx context.Context, path string, apps [
 }
 
 // installedApps lists the app bundles under the app roots, each with
-// its name key and date added. complete is false when a root or a
-// folder in it could not be listed, which could hide an installed copy.
+// its name key and date added, following symlinks. complete is false
+// when a root, a folder in it or an entry could not be read, which
+// could hide an installed copy.
 func (d *downloadedInstallers) installedApps(ctx context.Context) ([]installedApp, bool) {
 	var apps []installedApp
 	complete := true
@@ -319,13 +331,15 @@ func (d *downloadedInstallers) installedApps(ctx context.Context) ([]installedAp
 		}
 		for _, e := range entries {
 			p := filepath.Join(root, e.Name())
-			if strings.EqualFold(filepath.Ext(e.Name()), ".app") {
-				if d.w.isDir(ctx, p) {
-					add(p)
-				}
+			isDir, err := d.statDir(ctx, p)
+			switch {
+			case err != nil:
+				complete = false
 				continue
-			}
-			if !e.IsDir() {
+			case !isDir:
+				continue
+			case strings.EqualFold(filepath.Ext(e.Name()), ".app"):
+				add(p)
 				continue
 			}
 			sub, partial, err := d.w.list(ctx, p)
@@ -335,13 +349,33 @@ func (d *downloadedInstallers) installedApps(ctx context.Context) ([]installedAp
 			}
 			for _, s := range sub {
 				sp := filepath.Join(p, s.Name())
-				if strings.EqualFold(filepath.Ext(s.Name()), ".app") && d.w.isDir(ctx, sp) {
+				if !strings.EqualFold(filepath.Ext(s.Name()), ".app") {
+					continue
+				}
+				isDir, err := d.statDir(ctx, sp)
+				if err != nil {
+					complete = false
+				} else if isDir {
 					add(sp)
 				}
 			}
 		}
 	}
 	return apps, complete
+}
+
+// statDir reports whether path is a folder, through a symlink. A path
+// that is not there, a dangling symlink among them, is no folder; any
+// other failure is an error.
+func (d *downloadedInstallers) statDir(ctx context.Context, path string) (bool, error) {
+	fi, err := d.w.stat(ctx, path)
+	switch {
+	case absent(err):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return fi.IsDir(), nil
 }
 
 // appInfo reads an installed app's Info.plist once; nil when it
@@ -362,12 +396,13 @@ func (d *downloadedInstallers) appInfo(ctx context.Context, a installedApp, info
 	return info
 }
 
-// zippedApp reads the one app at the top of a zip, or says why the zip
-// is kept.
-func (d *downloadedInstallers) zippedApp(ctx context.Context, path string) (bundleInfo, string) {
+// zippedApp reads the one app at the top of a zip and names its
+// bundle, or says why the zip is kept.
+func (d *downloadedInstallers) zippedApp(ctx context.Context, path string) (bundleInfo, string, string) {
 	type result struct {
-		data []byte
-		why  string
+		data   []byte
+		bundle string
+		why    string
 	}
 	r, err := bounded(ctx, d.w, path, func() (result, error) {
 		zr, err := zip.OpenReader(path)
@@ -377,9 +412,14 @@ func (d *downloadedInstallers) zippedApp(ctx context.Context, path string) (bund
 		defer func() { _ = zr.Close() }()
 		var bundles []string
 		var plist *zip.File
+		beside := false
 		for _, f := range zr.File {
-			top, rest, _ := strings.Cut(f.Name, "/")
-			if !strings.EqualFold(filepath.Ext(top), ".app") || top == ".app" {
+			top, rest, inFolder := strings.Cut(f.Name, "/")
+			if top == "__MACOSX" {
+				continue
+			}
+			if !inFolder || !strings.EqualFold(filepath.Ext(top), ".app") || top == ".app" {
+				beside = true
 				continue
 			}
 			if !slices.Contains(bundles, top) {
@@ -394,6 +434,8 @@ func (d *downloadedInstallers) zippedApp(ctx context.Context, path string) (bund
 			return result{why: "it holds no app at its top level"}, nil
 		case len(bundles) > 1:
 			return result{why: "it holds more than one app"}, nil
+		case beside:
+			return result{why: "it holds more than the app"}, nil
 		case plist == nil || plist.UncompressedSize64 > maxInfoPlist:
 			return result{why: "its app's Info.plist cannot be read"}, nil
 		}
@@ -406,19 +448,19 @@ func (d *downloadedInstallers) zippedApp(ctx context.Context, path string) (bund
 		if err != nil {
 			return result{why: "its app's Info.plist cannot be read"}, nil
 		}
-		return result{data: data}, nil
+		return result{data: data, bundle: bundles[0]}, nil
 	})
 	if err != nil {
-		return bundleInfo{}, "it cannot be read"
+		return bundleInfo{}, "", "it cannot be read"
 	}
 	if r.why != "" {
-		return bundleInfo{}, r.why
+		return bundleInfo{}, "", r.why
 	}
 	info, err := d.parseInfo(ctx, r.data)
 	if err != nil {
-		return bundleInfo{}, "its app's Info.plist cannot be read"
+		return bundleInfo{}, "", "its app's Info.plist cannot be read"
 	}
-	return info, ""
+	return info, r.bundle, ""
 }
 
 func readLimited(path string, limit int64) ([]byte, error) {
@@ -584,12 +626,16 @@ func versionParts(v string) ([]uint64, bool) {
 }
 
 // nameKey is how a download's name and an app's name are compared: the
-// words of the name, folded and run together, less those that say
-// nothing about which app it is: numbers, a v and a number, and
+// words of the name, folded and run together, less what says nothing
+// about which app it is: a dotted version, a copy's " (1)", x86_64 and
 // noiseWords. A word ending in "installer" or "setup" loses the
-// ending. "Slack-4.41.105-macOS" and "Slack" both read "slack",
-// "ChatGPTInstaller" and "ChatGPT" both read "chatgpt".
+// ending. A lone number stays: "Affinity Photo 2" is another app than
+// "Affinity Photo". "Slack-4.41.105-macOS" and "Slack" both read
+// "slack", "ChatGPTInstaller" and "ChatGPT" both read "chatgpt".
 func nameKey(name string) string {
+	name = copySuffix.ReplaceAllString(name, "")
+	name = x8664.ReplaceAllString(name, " ")
+	name = versionInName.ReplaceAllString(name, "$1 ")
 	var b strings.Builder
 	words := strings.FieldsFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 	for _, w := range words {
@@ -599,26 +645,26 @@ func nameKey(name string) string {
 				w = rest
 			}
 		}
-		if noiseWords[w] || isNumber(w) || (strings.HasPrefix(w, "v") && isNumber(w[1:])) {
-			continue
+		if !noiseWords[w] {
+			b.WriteString(w)
 		}
-		b.WriteString(w)
 	}
 	return b.String()
 }
 
-// versionInName is a dotted version in a file name, after an optional v.
-var versionInName = regexp.MustCompile(`(?:^|[^0-9A-Za-z.])[vV]?([0-9]+(?:\.[0-9]+)+)(?:$|[^0-9A-Za-z.])`)
+var (
+	copySuffix = regexp.MustCompile(`\s*\([0-9]+\)$`)
+	x8664      = regexp.MustCompile(`(?i)x86[-_]64`)
+	// versionInName is a dotted version in a file name, after an
+	// optional v, at the start of a word.
+	versionInName = regexp.MustCompile(`(^|[^0-9A-Za-z])[vV]?([0-9]+(?:\.[0-9]+)+)`)
+)
 
 // nameVersion is the first dotted version a download's name spells
-// ("Slack-4.41.105-macOS" spells 4.41.105), or "".
+// ("Slack-4.41.105-macOS" and "Foo.4.2" spell 4.41.105 and 4.2), or "".
 func nameVersion(name string) string {
 	if m := versionInName.FindStringSubmatch(name); m != nil {
-		return m[1]
+		return m[2]
 	}
 	return ""
-}
-
-func isNumber(s string) bool {
-	return s != "" && !strings.ContainsFunc(s, func(r rune) bool { return r < '0' || r > '9' })
 }

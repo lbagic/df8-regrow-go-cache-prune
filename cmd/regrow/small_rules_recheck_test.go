@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lbagic/regrow/internal/engine"
 )
@@ -80,9 +81,15 @@ func TestNpxRecheckStopsTheTrashMove(t *testing.T) {
 	host, run := recheckRun(t)
 	rule := engine.Rule{ID: "npx-cache", Title: "npx package folders", Category: "fixture", Risk: engine.RiskSafe, PreAction: engine.PreActionNpxRecheck}
 	used, idle := filepath.Join(host.Home, ".npm", "_npx", "used"), filepath.Join(host.Home, ".npm", "_npx", "idle")
+	old := time.Now().Add(-30 * 24 * time.Hour)
 	for _, d := range []string{used, idle} {
 		if err := os.MkdirAll(filepath.Join(d, "node_modules"), 0o755); err != nil {
 			t.Fatal(err)
+		}
+		for _, p := range []string{filepath.Join(d, "node_modules"), d} {
+			if err := os.Chtimes(p, old, old); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	// The shell waits in a builtin, so it starts no child to outlive it.

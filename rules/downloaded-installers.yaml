@@ -1,6 +1,6 @@
 # Installers in ~/Downloads for apps already installed. The
 # downloaded-installers query (internal/scanner/tool_downloads.go)
-# matches a .zip by the app it holds and a .dmg or .pkg by its file
+# matches a .zip by the one app it holds and a .dmg or .pkg by its file
 # name against the apps in /Applications and ~/Applications, and keeps
 # a download newer than the installed app, one touched in the last 14
 # days, and every download it cannot match or read. Each download is

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/lbagic/regrow/internal/engine"
 )
@@ -18,27 +19,34 @@ import (
 // to the Trash. A folder a running process works in or names on its
 // command line is kept: node loads modules as it needs them, so a
 // server npx started (an MCP server, a dev tool) fails at its next
-// require once its folder moves. Running a folder npx installed earlier
-// changes nothing in it, so its times cannot say whether it is in use.
-// The npx-recheck pre-action asks again right before the move.
+// require once its folder moves. So is a folder npx ran in the last
+// npxQuiet: npm 11.19 makes and removes a lock folder in it on every
+// run, which stamps the folder, and a server that renames its process
+// (process.title) shows no path to ps. The npx-recheck pre-action
+// judges the folder again right before the move.
 
 // npxCacheDir is npx's folder under npm's default cache, the cache
 // npm-cache's ~/.npm/_cacache belongs to.
 const npxCacheDir = ".npm/_npx"
 
+// npxQuiet is how long a folder must go without a run.
+const npxQuiet = 7 * 24 * time.Hour
+
 // keptNpx is an npx folder the rule leaves alone, and why.
 type keptNpx struct{ path, why string }
 
 // npxCache is the query with its seams: tests hand in the walker, the
-// folder and the process list.
+// folder, the process list and the clock.
 type npxCache struct {
 	w     *walker
 	dir   string
+	quiet time.Duration
 	procs func(ctx context.Context) (processes, error)
+	now   func() time.Time
 }
 
 func newNpxCache(home string) *npxCache {
-	return &npxCache{w: defaultWalker, dir: filepath.Join(home, npxCacheDir), procs: runningProcesses}
+	return &npxCache{w: defaultWalker, dir: filepath.Join(home, npxCacheDir), quiet: npxQuiet, procs: runningProcesses, now: time.Now}
 }
 
 func queryNpxCache(ctx context.Context) ([]engine.Item, error) {
@@ -51,8 +59,9 @@ func queryNpxCache(ctx context.Context) ([]engine.Item, error) {
 }
 
 // RecheckNpxEntry is the npx-cache pre-action: right before an npx
-// folder goes to the Trash it asks again whether a running process
-// uses it, and refuses when one does or when that cannot be told.
+// folder goes to the Trash it judges the folder again, and refuses when
+// a running process uses it, npx ran it since the scan, or either
+// cannot be told.
 func RecheckNpxEntry(ctx context.Context, path string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -92,20 +101,38 @@ func (n *npxCache) scan(ctx context.Context) ([]engine.Item, []keptNpx, error) {
 	slices.Sort(dirs)
 	var kept []keptNpx
 	for _, d := range dirs {
-		if why := keepNpx(d, procs); why != "" {
-			kept = append(kept, keptNpx{d, why})
-			continue
-		}
-		u, found, err := n.w.usage(ctx, d)
-		if err != nil {
+		item, why, ok, err := n.judge(ctx, d, procs)
+		switch {
+		case err != nil:
 			return nil, nil, err
+		case !ok:
+		case why != "":
+			kept = append(kept, keptNpx{d, why})
+		default:
+			items = append(items, item)
 		}
-		if !found {
-			continue
-		}
-		items = append(items, engine.Item{Path: d, Label: n.label(ctx, d), Bytes: u.Bytes, LastUsed: u.Newest, Partial: u.Partial})
 	}
 	return items, kept, nil
+}
+
+// judge decides one folder: an item, or why it stays. ok is false when
+// the folder is gone. Its only error is ctx's.
+func (n *npxCache) judge(ctx context.Context, dir string, procs processes) (engine.Item, string, bool, error) {
+	if why := keepNpx(dir, procs); why != "" {
+		return engine.Item{}, why, true, nil
+	}
+	u, found, err := n.w.usage(ctx, dir)
+	switch {
+	case err != nil:
+		return engine.Item{}, "", false, err
+	case !found:
+		return engine.Item{}, "", false, nil
+	case u.Partial:
+		return engine.Item{}, "it cannot all be read, so when npx last ran it is unknown", true, nil
+	case n.now().Sub(u.Newest) < n.quiet:
+		return engine.Item{}, fmt.Sprintf("npx ran it in the last %d days", int(n.quiet.Hours()/24)), true, nil
+	}
+	return engine.Item{Path: dir, Label: n.label(ctx, dir), Bytes: u.Bytes, LastUsed: u.Newest}, "", true, nil
 }
 
 // recheck judges one folder again, as the pre-action does.
@@ -117,7 +144,13 @@ func (n *npxCache) recheck(ctx context.Context, path string) error {
 	if err != nil {
 		return fmt.Errorf("recheck %s: %w: not moved", path, err)
 	}
-	if why := keepNpx(path, procs); why != "" {
+	_, why, ok, err := n.judge(ctx, path, procs)
+	switch {
+	case err != nil:
+		return fmt.Errorf("recheck %s: %w: not moved", path, err)
+	case !ok:
+		return fmt.Errorf("npx folder %s is gone: not moved", path)
+	case why != "":
 		return fmt.Errorf("npx folder %s is kept now (%s): not moved", path, why)
 	}
 	return nil
