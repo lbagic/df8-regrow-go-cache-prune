@@ -126,7 +126,7 @@ The engine executes on request: the peer's confirmation is the per-run opt-in. A
 
 | Event | Fields |
 |---|---|
-| `journal` | `entry`: the oplog line, `{time, run, seq, event, rule_id, item_key, kind, command, path, bytes, receipt, error}`; `event` is `start`, `done` or `fail`; a done Trash move carries `receipt: {original, to, method}` |
+| `journal` | `entry`: the oplog line, `{time, run, seq, event, rule_id, item_key, kind, command, path, bytes, receipt, error}`; `event` is `start`, `done` or `fail`; a done Trash move carries `receipt: {original, to, method, ino}`, where `ino` is the inode of the item at `to`, read right after the move, and is absent when that read failed and in lines written before it was recorded |
 | `done` | `result`; `canceled`: `true` when a cancel or shutdown stopped the run before every action was attempted |
 
 `result` is `{run_id, done, failed, bytes, trash_bytes, staged_bytes, exported_bytes, failures, skipped, pruned, stopped}`. `bytes` counts successful actions; `trash_bytes` is the part now in the Trash, freed once it is emptied; `staged_bytes` the part moved into regrow's staging directory because Finder was unavailable, which emptying the Trash never frees; `exported_bytes` the part that is a docker volume removed after its export, whose tarball stays in the run's folder in the staging directory, about as large as the volume was, until someone deletes it, and which `undo` does not restore. What is left of `bytes` after the three parts is what steward commands freed as they ran, and a docker volume is not in it. `pruned` is `{files, bytes}` deleted by prune actions; a plan from `plan` has none, only a tick's autotrim prunes. One failed action does not stop the run.

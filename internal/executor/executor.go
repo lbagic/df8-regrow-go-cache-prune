@@ -255,10 +255,14 @@ type UndoResult struct {
 	// ExportSkipped counts export receipts (docker volume tarballs):
 	// not auto-restorable, recovery is manual from the staging file.
 	ExportSkipped int
+	// Gone holds the moves whose copy is gone (oplog.Run.OnDisk): not
+	// tried and not journaled, since nothing is there to restore.
+	Gone []oplog.Entry
 }
 
-// Undo restores a run's undoable trash receipts, last moved first,
-// journaling every attempt under the same run id.
+// Undo restores a run's Trash and staging moves whose copy is still
+// there, last moved first, journaling every attempt under the same run
+// id.
 func (e *Executor) Undo(run oplog.Run) (UndoResult, error) {
 	now := e.Now
 	if now == nil {
@@ -276,7 +280,9 @@ func (e *Executor) Undo(run oplog.Run) (UndoResult, error) {
 			res.ExportSkipped++
 		}
 	}
-	for _, entry := range run.Undoable() {
+	present, gone := run.OnDisk()
+	res.Gone = gone
+	for _, entry := range present {
 		err := trash.Restore(*entry.Receipt)
 		undoEntry := oplog.Entry{
 			Time: now(), Run: run.ID, Seq: entry.Seq, Event: oplog.EventUndo,

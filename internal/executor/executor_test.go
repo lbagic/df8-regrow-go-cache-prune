@@ -384,22 +384,32 @@ func TestUndoRestoresReverseAndJournals(t *testing.T) {
 	}
 }
 
+// A restore that fails (its original grew back) is journaled with its
+// error; a move whose copy is gone is reported and never tried.
 func TestUndoJournalsFailedRestore(t *testing.T) {
+	dir := t.TempDir()
+	for _, p := range []string{dir + "/staged/x", dir + "/u/x"} {
+		if err := writeFile(p, "x"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	log := &memLog{}
 	e := &Executor{Log: log, Now: fixedNow}
 	run := oplog.Run{ID: "r1", Entries: []oplog.Entry{
 		{Run: "r1", Seq: 1, Event: oplog.EventDone, RuleID: "x",
-			Receipt: &trash.Receipt{Original: "/u/x", To: "/gone/x", Method: trash.MethodStaging}},
+			Receipt: &trash.Receipt{Original: dir + "/u/x", To: dir + "/staged/x", Method: trash.MethodStaging}},
+		{Run: "r1", Seq: 2, Event: oplog.EventDone, RuleID: "x",
+			Receipt: &trash.Receipt{Original: dir + "/u/y", To: dir + "/gone/y", Method: trash.MethodStaging}},
 	}}
 	res, err := e.Undo(run)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Failed != 1 || res.Restored != 0 {
-		t.Fatalf("want failed restore counted: %+v", res)
+	if res.Failed != 1 || res.Restored != 0 || len(res.Gone) != 1 || res.Gone[0].Seq != 2 {
+		t.Fatalf("want one failed restore and one gone copy: %+v", res)
 	}
-	if len(log.entries) != 1 || log.entries[0].Error == "" {
-		t.Fatalf("failed restore must be journaled with its error: %+v", log.entries)
+	if len(log.entries) != 1 || log.entries[0].Seq != 1 || log.entries[0].Error == "" {
+		t.Fatalf("only the tried restore is journaled, with its error: %+v", log.entries)
 	}
 }
 

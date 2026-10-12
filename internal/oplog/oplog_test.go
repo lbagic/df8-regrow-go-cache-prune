@@ -1,8 +1,10 @@
 package oplog
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -193,7 +195,7 @@ func TestRunsGroupsAndOrders(t *testing.T) {
 	}
 }
 
-func TestUndoableReverseOrderAndExcludesUndone(t *testing.T) {
+func TestPendingReverseOrderAndExcludesUndone(t *testing.T) {
 	rc := func(p string) *trash.Receipt {
 		return &trash.Receipt{Original: p, To: "/t" + p, Method: trash.MethodStaging}
 	}
@@ -208,14 +210,116 @@ func TestUndoableReverseOrderAndExcludesUndone(t *testing.T) {
 		}}, // export tarball: recovery pointer, never auto-restored
 		{Run: "r1", Seq: 2, Event: EventUndo}, // /b already restored
 	}}
-	got := r.Undoable()
+	got := r.pending()
 	if len(got) != 2 || got[0].Receipt.Original != "/c" || got[1].Receipt.Original != "/a" {
 		t.Fatalf("want [/c /a] (reverse order, /b undone, native and export skipped), got %+v", got)
 	}
 
 	// A failed undo attempt does not mark the action as undone.
 	r.Entries = append(r.Entries, Entry{Run: "r1", Seq: 1, Event: EventUndo, Error: "locked"})
-	if got := r.Undoable(); len(got) != 2 {
+	if got := r.pending(); len(got) != 2 {
 		t.Fatalf("failed undo must keep the action undoable, got %+v", got)
+	}
+}
+
+func seqs(es []Entry) []int {
+	out := []int{}
+	for _, e := range es {
+		out = append(out, e.Seq)
+	}
+	return out
+}
+
+// Finder reuses a name once nothing in the Trash has it, so a later
+// action on the same path means the earlier copy was already gone: the
+// earlier move counts as gone even though something sits at its path.
+func TestRunsMarkACopyPathALaterActionTook(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a", "b", "cache"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done := func(run string, seq int, name string, method trash.Method) Entry {
+		return Entry{Run: run, Seq: seq, Event: EventDone,
+			Receipt: &trash.Receipt{Original: "/home/" + name, To: filepath.Join(dir, name), Method: method}}
+	}
+	move := func(run string, seq int, name string) Entry { return done(run, seq, name, trash.MethodFinder) }
+	for _, tc := range []struct {
+		name    string
+		entries []Entry
+		want    string
+	}{
+		{"a later run", []Entry{move("r1", 1, "a"), move("r1", 2, "b"), move("r2", 1, "a")},
+			"r1 present [2] gone [1]; r2 present [1] gone []"},
+		{"the later move undone", []Entry{move("r1", 1, "a"), move("r2", 1, "a"), {Run: "r2", Seq: 1, Event: EventUndo}},
+			"r1 present [] gone [1]; r2 present [] gone []"},
+		{"three moves to one path", []Entry{move("r1", 1, "a"), move("r2", 1, "a"), move("r3", 1, "a")},
+			"r1 present [] gone [1]; r2 present [] gone [1]; r3 present [1] gone []"},
+		{"inside one run", []Entry{move("r1", 1, "a"), move("r1", 2, "a")},
+			"r1 present [2] gone [1]"},
+		{"another case of the name", []Entry{move("r1", 1, "Cache"), move("r2", 1, "cache")},
+			"r1 present [] gone [1]; r2 present [1] gone []"},
+		{"an export on the path", []Entry{done("r1", 1, "a", trash.MethodStaging), done("r1", 2, "a", trash.MethodExport)},
+			"r1 present [] gone [1]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []string
+			for _, r := range Runs(tc.entries) {
+				present, gone := r.OnDisk()
+				got = append(got, fmt.Sprintf("%s present %v gone %v", r.ID, seqs(present), seqs(gone)))
+			}
+			if g := strings.Join(got, "; "); g != tc.want {
+				t.Errorf("got  %s\nwant %s", g, tc.want)
+			}
+		})
+	}
+}
+
+// Matching a copy path ignoring case is for receipts with no recorded
+// identity. One with identity is keyed by its exact path, since a volume
+// that tells case apart holds Cache and cache as two items.
+func TestRunsFoldCaseOnlyForAReceiptWithNoIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		file         string
+		older, later uint64 // 1: the file's inode, 2: another one, 0: none
+		want         string
+	}{
+		{"a receipt with identity", "Cache", 1, 2,
+			"r1 present [1] gone []; r2 present [] gone [1]"},
+		{"an old receipt under a newer one", "cache", 0, 1,
+			"r1 present [] gone [1]; r2 present [1] gone []"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tc.file)
+			if err := os.WriteFile(path, nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			fi, err := os.Lstat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ino := fi.Sys().(*syscall.Stat_t).Ino
+			id := func(n uint64) uint64 {
+				if n == 0 {
+					return 0
+				}
+				return ino + n - 1
+			}
+			move := func(run, name string, n uint64) Entry {
+				return Entry{Run: run, Seq: 1, Event: EventDone, Receipt: &trash.Receipt{
+					Original: "/home/" + name, To: filepath.Join(dir, name), Method: trash.MethodFinder, Ino: id(n)}}
+			}
+			var got []string
+			for _, r := range Runs([]Entry{move("r1", "Cache", tc.older), move("r2", "cache", tc.later)}) {
+				present, gone := r.OnDisk()
+				got = append(got, fmt.Sprintf("%s present %v gone %v", r.ID, seqs(present), seqs(gone)))
+			}
+			if g := strings.Join(got, "; "); g != tc.want {
+				t.Errorf("got  %s\nwant %s", g, tc.want)
+			}
+		})
 	}
 }

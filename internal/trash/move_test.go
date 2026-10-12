@@ -2,10 +2,13 @@ package trash
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -190,5 +193,97 @@ func TestMoveAndRestoreReadOnlyTree(t *testing.T) {
 	}
 	if err := os.Chmod(filepath.Join(target, "pkg"), 0o755); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestReceiptGone(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "copy")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for to, want := range map[string]bool{
+		file:                          false,
+		filepath.Join(dir, "emptied"): true,
+		// A component that is a file, not a folder: nothing is there.
+		filepath.Join(file, "inside"): true,
+	} {
+		if got := (Receipt{To: to, Method: MethodFinder}).Gone(); got != want {
+			t.Errorf("Gone(%s) = %v, want %v", to, got, want)
+		}
+	}
+	// A refused stat says nothing about the copy, so it is not gone.
+	if os.Geteuid() == 0 {
+		t.Skip("root reads through a folder's permissions")
+	}
+	locked := filepath.Join(dir, "locked")
+	if err := os.MkdirAll(filepath.Join(locked, "copy"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if (Receipt{To: filepath.Join(locked, "copy"), Method: MethodStaging}).Gone() {
+		t.Error("a copy behind a folder that refuses a stat must not read as gone")
+	}
+}
+
+// Once the copy leaves the Trash, an item the user trashes later can
+// take its name. The receipt knows its own item, so that one reads as
+// gone and is never restored into the original's place.
+func TestRestoreRefusesAnotherItemAtTheCopyPath(t *testing.T) {
+	dir := writeTree(t, "cache/a.bin")
+	target := filepath.Join(dir, "cache")
+	m := &Mover{Home: "/Users/t", StagingDir: filepath.Join(t.TempDir(), "staging"), RunFinder: fakeFinder("", errors.New("no Finder"))}
+	r, err := m.Move(context.Background(), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Ino == 0 || r.Gone() {
+		t.Fatalf("receipt %+v: want its item's identity recorded and the copy present", r)
+	}
+	if err := os.Rename(r.To, filepath.Join(dir, "taken-out")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(r.To, "another"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !r.Gone() {
+		t.Error("another item at the copy's path must read as gone")
+	}
+	if err := Restore(r); err == nil || !strings.Contains(err.Error(), "another item") {
+		t.Errorf("Restore = %v, want it refused", err)
+	}
+	if _, err := os.Lstat(target); !os.IsNotExist(err) {
+		t.Error("another item was restored into the original's place")
+	}
+}
+
+// macOS gives a volume a new device number when its disk is attached
+// again, so a copy still in that volume's Trash is judged by its inode
+// alone, however its receipt was journaled.
+func TestReceiptKeepsItsCopyWhenTheDiskIsRenumbered(t *testing.T) {
+	dir := writeTree(t, "trash/cache/a.bin")
+	to := filepath.Join(dir, "trash", "cache")
+	fi, err := os.Lstat(to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := fi.Sys().(*syscall.Stat_t)
+	original := filepath.Join(dir, "home", "cache")
+	line := fmt.Sprintf(`{"original":%q,"to":%q,"method":"finder","dev":%d,"ino":%d}`, original, to, uint64(st.Dev)+1, st.Ino)
+	var r Receipt
+	if err := json.Unmarshal([]byte(line), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Gone() {
+		t.Error("a copy whose inode matches must read as present on a renumbered disk")
+	}
+	if err := Restore(r); err != nil {
+		t.Fatalf("Restore = %v, want the copy restored", err)
+	}
+	if _, err := os.Lstat(filepath.Join(original, "a.bin")); err != nil {
+		t.Errorf("not restored: %v", err)
 	}
 }

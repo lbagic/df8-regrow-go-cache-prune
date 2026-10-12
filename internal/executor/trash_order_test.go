@@ -142,7 +142,7 @@ func TestEmptyTrashAfterTheMoveLosesIt(t *testing.T) {
 	plan.Actions[0], plan.Actions[1] = plan.Actions[1], plan.Actions[0]
 
 	undo := fx.run(t, plan)
-	if undo.Restored != 0 || undo.Failed != 1 {
-		t.Fatalf("undo = %+v, want the restore to fail", undo)
+	if undo.Restored != 0 || undo.Failed != 0 || len(undo.Gone) != 1 {
+		t.Fatalf("undo = %+v, want the move reported gone", undo)
 	}
 }
