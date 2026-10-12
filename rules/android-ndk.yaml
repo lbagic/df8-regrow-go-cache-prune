@@ -13,7 +13,12 @@ title: Android NDKs (no Android Studio)
 category: toolchains
 risk: caution
 tool_query: android-ndk
-note: Command-line Android builds (Gradle, React Native, Flutter) use the SDK without Studio; a build that needs this NDK fails until it is installed again. The row says when ANDROID_HOME points at the SDK.
+note: Command-line Android builds (Gradle, React Native, Flutter) use the SDK without Studio; a build that needs this NDK fails until it is installed again. The android-sdk row says when ANDROID_HOME points at the SDK.
+scans: "the NDKs in `~/Library/Android/sdk/ndk/` and `~/Library/Android/sdk/ndk-bundle`, and, to tell whether an Android Studio is installed, the apps in `/Applications` and `~/Applications` and one folder down, JetBrains Toolbox's apps in `~/Library/Application Support/JetBrains/Toolbox/apps`, and Spotlight (`mdfind` for Android Studio's bundle identifier)"
+keeps:
+  - "every NDK while an Android Studio is installed in any of those places"
+  - "every NDK when an Applications folder or JetBrains Toolbox's apps folder cannot be read in full, or a link in an Applications folder cannot be followed: the rule then shows an error. A Toolbox folder that is a link leading nowhere, and `mdfind` missing, failing or finding nothing, count as no Android Studio; `mdfind` hanging ends in the query's 2-minute error"
+  - "an NDK reached through a symlink, and an SDK anywhere but `~/Library/Android/sdk` or reached through a symlink"
 regen:
   story: sdkmanager "ndk;<version>" (or the Gradle build that names it) downloads it again.
   cost: a 1–2 GB download per NDK; needs the network

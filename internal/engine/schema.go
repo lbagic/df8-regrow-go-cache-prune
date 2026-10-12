@@ -67,10 +67,10 @@ func (p *PathEntry) UnmarshalYAML(node *yaml.Node) error {
 
 // matches reports whether the entry applies to the given host version.
 func (p PathEntry) matches(version string) bool {
-	if p.OSMin != "" && compareVersion(version, p.OSMin) < 0 {
+	if p.OSMin != "" && CompareVersion(version, p.OSMin) < 0 {
 		return false
 	}
-	if p.OSMax != "" && compareVersion(version, p.OSMax) > 0 {
+	if p.OSMax != "" && CompareVersion(version, p.OSMax) > 0 {
 		return false
 	}
 	return true
@@ -276,17 +276,18 @@ type Rule struct {
 	Paths map[string][]PathEntry `yaml:"paths" json:"paths,omitempty"`
 	// Discover enables marker-file discovery.
 	Discover *Discover `yaml:"discover" json:"discover,omitempty"`
-	// ToolQuery names a built-in scanner query (docker-df, simctl,
-	// hf-scan-cache, ...) for targets only a tool can enumerate.
+	// ToolQuery names a built-in scanner query (docker-build-cache,
+	// simctl-devices, hf-hub, ...) for targets only a tool can enumerate.
 	ToolQuery string `yaml:"tool_query" json:"tool_query,omitempty"`
 	// NativeCommand is the steward command preferred over raw
 	// deletion. Placeholders {path} and {arg} are substituted per
 	// item; without a placeholder the command runs once per rule.
 	NativeCommand Argv `yaml:"native_command" json:"native_command,omitempty"`
 	// PreAction names a registered executor hook that must succeed
-	// before each item's native command runs (docker volume export to
-	// staging). It is how a native command whose target cannot reach
-	// the Trash still honors trash-not-rm (invariant 2).
+	// before each item's native command or Trash move: the docker volume
+	// export to staging, which is how a command whose target cannot
+	// reach the Trash still honors trash-not-rm (invariant 2), or a
+	// recheck of the item.
 	PreAction string `yaml:"pre_action" json:"pre_action,omitempty"`
 	// EmptiesTrash marks a command that permanently deletes the Trash.
 	// The planner runs it before every other action, so the run's own
@@ -307,6 +308,12 @@ type Rule struct {
 	Prune *Prune `yaml:"prune" json:"prune,omitempty"`
 	// Causes are the fix-the-cause rows `regrow doctor` checks.
 	Causes []Cause `yaml:"causes" json:"causes,omitempty"`
+	// Scans says what the rule's tool query walks, reads and runs, for
+	// docs/RULES.md; paths and discover speak for themselves there.
+	Scans string `yaml:"scans" json:"scans,omitempty"`
+	// Keeps lists what the rule leaves out of its items although it
+	// looks there, one line each, for docs/RULES.md.
+	Keeps []string `yaml:"keeps" json:"keeps,omitempty"`
 	// Fixture is the rule's golden-test data; never serialized to JSON.
 	Fixture *Fixture `yaml:"fixture" json:"-"`
 }
@@ -447,6 +454,9 @@ func (r Rule) Validate() error {
 		if len(c.Fix) == 0 || slices.Contains(c.Fix, "") {
 			errs = append(errs, fmt.Sprintf("causes: %s needs fix lines, none empty — the row exists to print them", c.Check))
 		}
+	}
+	if slices.ContainsFunc(r.Keeps, func(k string) bool { return strings.TrimSpace(k) == "" }) {
+		errs = append(errs, "keeps must not contain empty lines")
 	}
 	if r.PreAction != "" {
 		if !knownPreActions[r.PreAction] {

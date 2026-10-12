@@ -20,6 +20,13 @@ risk: caution
 tool_query: docker-images-unused
 native_command: docker image rm {arg}
 note: Docker records when an image was pulled, not when it last ran. An image used only by `docker run --rm`, or by a compose stack that is down, is listed here. Listed images are ones Docker records as pulled from or pushed to the repository they are named for. Docker does not record the tag, so a tag you made yourself inside that repository is listed too, though no registry has it; and an image built here and pushed under its own name is listed when Docker kept no record of the build, and only the registry's copy brings it back.
+scans: "`docker system df -v`, `docker image inspect` and `docker container inspect`, through the daemon your current docker context points at"
+keeps:
+  - "an image any container uses, stopped containers included; when Docker cannot say, every image counts as used"
+  - "an image pulled or tagged here in the last 30 days, or with no such date"
+  - "an image built here, one with no tag or more than one, and one known only by digest"
+  - "an image whose repository is not one Docker records it as pulled from or pushed to"
+  - "an image the keep-list in `~/.config/regrow/config.yaml` names, by repository or `repository:tag`"
 regen:
   story: docker pull, or the next docker run / compose up that names the image, downloads it again from the registry it was pulled from or pushed to.
   cost: re-download over the network; needs registry access and the registry's copy, and a tag that moved since brings a newer image

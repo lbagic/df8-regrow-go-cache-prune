@@ -8,6 +8,7 @@ category: docker
 risk: surface-only
 tool_query: docker-volumes-kept
 note: Each row says why it is kept. Protect more volumes via the keep-list (name glob or compose project) in ~/.config/regrow/config.yaml.
+scans: "the volumes the two other volume rules read, in the same pass; each row says why it is kept"
 regen:
   story: n/a — regrow never deletes these; remove a keep reason (stop the container, edit the keep-list) and rescan to reclassify.
   cost: n/a

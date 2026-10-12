@@ -29,8 +29,8 @@ Answer to "why won't tw93 add this in a weekend": depth (dedup-aware model handl
    - Auto-clean (Safe): regenerable caches.
    - Review-and-select (Caution): shown with cost, native command used.
    - Surface-only (Expert/user data): VM bundles, model libraries, iOS backups, Downloads, Messages media — size + pointer to the right tool, never deletable through us.
-3. **Reversible by default.** Dry-run default → trash (not rm) → ops log → `reclaim undo`. `--rm` for the brave.
-4. **Native commands first.** `hf cache delete`, `ollama rm`, `pnpm store prune`, `go clean -modcache`, `simctl runtime delete`, `docker builder prune` — raw rm only where no steward exists.
+3. **Reversible by default.** Dry-run default → trash (not rm) → ops log → `regrow undo`. (A `--rm` opt-out for the brave is planned, not built.)
+4. **Native commands first.** `ollama rm`, `pnpm store prune`, `go clean -modcache`, `simctl runtime delete`, `docker builder prune` — the Trash only where no steward exists (a HuggingFace repo folder goes to the Trash whole, which is what `hf cache rm` would delete).
 5. **Rules as open data.** Each target = a declarative YAML rule (paths per OS/version, marker files, native command, risk, regen story) + tiny amount of code for the weird ones (Docker df parsing, HF scan). Community PRs a rule, not code. Golden tests run every rule against fixture homes.
 6. **Phantom-space explainers.** TM snapshots, Docker VM files, APFS purgeable — own category with "why Finder still shows full" copy. Nobody explains this; everyone googles it.
 7. **Hero-bug scanners.** Claude Code debug-loop (100–200GB), mediaanalysisd leak (≤143GB), Spotlight runaway (233GB observed), Playwright transform cache (26GB). Cheap checks, massive "found X GB" screenshots — the viral loop.
@@ -75,10 +75,10 @@ reclaim                     scan → inventory, grouped, size-ranked
 
 - Go + Bubble Tea + Lip Gloss; GoReleaser; single static binary.
 - `rules/*.yaml` embedded at build; `--rules-dir` override for development and community testing.
-- Engine walks: known paths (per-OS resolution incl. version-dependent paths from research §14) + marker-file discovery (CACHEDIR.TAG, pyvenv.cfg, node_modules) + tool queries (docker df, simctl list, hf scan-cache, ollama list).
-- Every destructive action: path guard (never empty//`/`/$HOME/mount roots), trash via Finder API (`osascript`/`trash` syscall) with fallback staging dir, journaled to `~/.local/state/reclaim/oplog.jsonl`.
-- Tests: fixture $HOME builder + golden dry-run snapshots per rule; CI matrix macOS/Linux.
-- Telemetry: none. Optional `reclaim stats` prints local-only lifetime GB reclaimed (nice for screenshots).
+- Engine walks: known paths (per-OS resolution incl. version-dependent paths from research §14) + discovery by folder name and marker (node_modules by name, Rust target by CACHEDIR.TAG, models by checkpoints) + tool queries (the docker CLI, simctl, tmutil, git, ps, lsof, osascript, plutil and mdfind; the HF cache and Ollama's manifests are read directly, with no CLI). [SCAN.md](SCAN.md) lists what a scan reads and runs.
+- Every destructive action is a Trash move via Finder (`osascript`) with a fallback staging dir, the tool's steward command (no undo), or the Go build cache prune's direct delete of old entries (no undo); a Trash move and a command run on one item's path pass the path guard first (never empty, relative, `/`, a top-level folder, $HOME or a `/Volumes` mount root); every action is journaled before it runs to `~/.local/state/regrow/oplog.jsonl` (`$XDG_STATE_HOME/regrow` when set).
+- Tests: fixture $HOME builder + golden dry-run snapshots per rule; CI tests on macOS (Linux joins in v0.3).
+- Telemetry: none. `regrow history` lists past runs and what each cleaned; a local-only lifetime total of GB reclaimed (nice for screenshots) is not built.
 
 ## 7. Monetization
 

@@ -12,6 +12,12 @@ risk: safe
 tool_query: npx-cache
 # Running processes are checked again right before each Trash move.
 pre_action: npx-recheck
+scans: "the folders in `~/.npm/_npx`, one per package spec npx ran, each with the newest modification time of anything in it and the package names in its `package.json`, and the working folders and command lines of your processes (`lsof`, `ps`)"
+keeps:
+  - "a folder a running process works in or names on its command line"
+  - "a folder with anything in it modified in the last 7 days: npx changes its folder each time it runs the package"
+  - "a folder that cannot all be read, and one whose path `lsof` and `ps` would not print as it is"
+  - "everything, when `lsof` or `ps` fails: the rule then shows an error and offers nothing"
 regen:
   story: npx installs a package again the next time it runs it.
   cost: next npx run re-downloads; network

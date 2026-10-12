@@ -12,6 +12,10 @@ category: xcode
 risk: surface-only
 tool_query: sim-runtimes-no-xcode
 note: "Regrow does not delete these. With the simctl Xcode left behind, /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/simctl runtime list names each runtime's identifier, and the same simctl's runtime delete <identifier> --dry-run shows what would go; without --dry-run it is meant to delete it, which is untested without Xcode. Simulators of a deleted runtime stop booting until it is downloaded again."
+scans: "`xcrun --find simctl`; the apps named like Xcode in `/Applications` and `~/Applications` and one folder down, with their `Info.plist`; Spotlight (`mdfind` for Xcode's bundle identifier); and, only when none of these finds Xcode, `simctl runtime list -j` from CoreSimulator's own copy, `/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/bin/simctl`"
+keeps:
+  - "every runtime while `xcrun` finds `simctl`, when `sim-runtimes` lists them, or an Xcode is installed; with an Xcode installed but `xcode-select` pointing at the Command Line Tools, neither rule lists them"
+  - "every runtime when an Xcode-named app, an Applications folder or a link there cannot be read or followed, since an Xcode there cannot be ruled out"
 regen:
   story: Xcode downloads a runtime again when a simulator needs it (Settings ▸ Components).
   cost: n/a — regrow never deletes these; a 5–10 GB download per runtime if one is needed again

@@ -55,7 +55,7 @@ Starting a scan makes it the engine's current scan and drops the previous scan's
 
 `finding` events arrive in completion order, not catalog order. A canceled scan sends no further `finding` and no `summary`, and cannot be planned.
 
-A Finding is `{"rule": Rule, "items": [Item], "error": "…"}`; `error` is set only for a rule-level failure (a tool missing, an unknown query). An item with `partial` and no `path` stands for targets the scan could not enumerate, a folder behind a glob or a discover root, and its label says which; no plan acts on it. Rule is the catalog rule as `regrow rules --json` prints it. An Item is:
+A Finding is `{"rule": Rule, "items": [Item], "error": "…"}`; `error` is set only for a rule-level failure (a tool query that failed or gave no answer in time, an unknown query); a tool that is not installed is no error, the rule just finds nothing. An item with `partial` and no `path` stands for targets the scan could not enumerate, a folder behind a glob or a discover root, and its label says which; no plan acts on it. Rule is the catalog rule as `regrow rules --json` prints it. An Item is:
 
 | Field | |
 |---|---|

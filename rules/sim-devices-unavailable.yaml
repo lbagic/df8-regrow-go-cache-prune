@@ -6,6 +6,7 @@ category: xcode
 risk: safe
 tool_query: simctl-devices-unavailable
 native_command: xcrun simctl delete unavailable
+scans: "`xcrun simctl list devices -j`; the devices simctl reports as unavailable"
 regen:
   story: Nothing to regenerate — these simulators reference SDKs that are gone.
   cost: none

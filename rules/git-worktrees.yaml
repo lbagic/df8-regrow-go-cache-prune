@@ -16,6 +16,14 @@ tool_query: git-worktrees
 native_command: git -C {path} worktree remove {path}
 pre_action: worktree-recheck
 note: Removes the whole worktree folder with its ignored build output (node_modules, target, .next, dist, …); the plan names any other rule's items inside it. The branch and its commits stay in the repository. git refuses a worktree with modified or untracked files, and the recheck right before the removal refuses one that gained any other unclean file, or a commit on a detached HEAD, since the scan.
+scans: "git repositories (a folder holding `.git`) up to 6 levels below `~/workspace`, `~/dev`, `~/projects`, `~/src`, `~/code` and `/tmp/claude-<uid>`, and their linked worktrees as git describes them (`worktree list`, `for-each-ref`, `rev-list`, `status --ignored`, `ls-files`, all with `--no-optional-locks`), with each worktree's file times"
+keeps:
+  - "the main worktree, and a worktree with `main`, `master` or the default branch checked out"
+  - "a worktree whose commits are in none of `main`, `master`, `origin/main`, `origin/master` and the remote's default branch, unless its branch's upstream is gone"
+  - "a worktree changed in the last 7 days: any file or folder, or git moving its HEAD"
+  - "a worktree where `git status --ignored` shows anything but whole ignored build folders (`node_modules`, `target`, `dist`, `.venv` and the like), so an ignored `.env` keeps it; and one with a tracked file flagged assume-unchanged or skip-worktree"
+  - "a locked or prunable worktree, one in the middle of a rebase, merge, cherry-pick, revert or bisect, and one that has or had a submodule"
+  - "every worktree of a repository with no `origin/HEAD`, `main` or `master` to compare against"
 regen:
   story: git worktree add <path> <branch> checks the branch out again; installs and builds recreate the build output.
   cost: seconds for the checkout; minutes to reinstall and rebuild

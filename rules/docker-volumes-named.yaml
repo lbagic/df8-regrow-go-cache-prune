@@ -12,6 +12,12 @@ tool_query: docker-volumes-named
 native_command: docker volume rm {arg}
 pre_action: docker-volume-export
 note: Named volumes hold real data (old database contents are the classic case). Check the project label and last-used date; each volume is exported to a tarball in regrow staging before removal.
+scans: "`docker system df -v`, `docker volume inspect` and `docker container inspect`, through the daemon your current docker context points at. A named volume no container mounts is listed however recently it was used"
+keeps:
+  - "a volume any container mounts, stopped containers included"
+  - "a volume the keep-list in `~/.config/regrow/config.yaml` names, by name glob or compose project"
+  - "a volume bigger than the export cap (10 GiB unless `volume_export_cap` says otherwise)"
+  - "Kept volumes are listed, with the reason, under `docker-volumes-kept`."
 regen:
   story: Not regenerable — the pre-delete tarball in regrow staging is the recovery copy (docker volume create, then untar).
   cost: data is gone for good once staging is cleared

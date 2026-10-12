@@ -13,6 +13,15 @@ tool_query: downloaded-installers
 # The download and its app are judged again right before each Trash move.
 pre_action: downloaded-installer-recheck
 note: A .dmg or .pkg is matched by its file name alone, and a disk image can hold more than the app (an uninstaller, a driver) - check the list before moving one.
+scans: "the `.dmg`, `.pkg` and `.zip` files at the top of `~/Downloads`, with their modification, change, creation and date-added times; a `.zip`'s list of contents and its app's `Info.plist`, read without extracting it; and the apps in `/Applications` and `~/Applications` and one folder down, with each app's date added, and its `Info.plist` where a judgement needs it (a binary one converted to text by `/usr/bin/plutil`)"
+keeps:
+  - "a download modified, changed, created or added to the folder in the last 14 days"
+  - "a `.zip` that holds no app, more than one app, or anything beside the app (macOS's `__MACOSX` folder aside), and one whose app's `Info.plist` cannot be read"
+  - "a download no installed app matches: a `.zip` whose app's bundle identifier no installed app carries; a `.dmg` or `.pkg` whose file name matches no installed app's name, both read without dotted versions (`4.2`, `v1.10.3`), architectures, a copy number such as `(1)`, words such as `mac`, `intel` or `install` and an `installer` or `setup` ending, and with case, spaces and punctuation aside; so `Sequoia.dmg` matches `Install macOS Sequoia.app`"
+  - "a download newer than an installed copy of its app: a `.zip` whose app has a higher version, or the same version and a higher build, a `.dmg` or `.pkg` whose name spells a higher version, and a `.dmg` or `.pkg` that arrived or changed after the app was installed"
+  - "a `.zip` whose app's version cannot be compared with an installed copy's, and one whose app shares its name with an installed app whose `Info.plist` cannot be read"
+  - "a `.dmg` or `.pkg` when an installed copy's date added cannot be read, or, if its name spells a version, when that copy's `Info.plist` cannot be read or its version compared"
+  - "every download, when an app folder cannot be read in full, since it could hide an installed copy; and a download that cannot be read"
 regen:
   story: The app stays installed; its maker offers the installer again if you ever reinstall.
   cost: one download per app you reinstall

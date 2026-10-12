@@ -67,5 +67,9 @@ changelog:
 
 release:
   footer: |
-    Every action is dry-run by default, moves to Trash (never rm), is
-    journaled before it runs, and is restorable with `regrow undo`.
+    Nothing is removed before you confirm a plan (at the prompt, with
+    --yes, or in the app), except by `regrow prune go-build --yes` and by
+    autotrim, which is off until you turn it on. Every action is
+    journaled before it runs; Trash moves are restorable with
+    `regrow undo`, and docs/RULES.md says how each rule removes and how
+    it comes back.

@@ -18,6 +18,14 @@ tool_query: build-output
 # The folder is judged again right before each Trash move.
 pre_action: build-output-recheck
 note: A project is left out while a file in its folder changed in the last 30 days or a process works in it; a deletion or a rename alone does not count. A tool you run without changing it reads as idle - check the list before removing its dist or .venv.
+scans: "folders named `.next`, `dist`, `.turbo` and `.venv`, up to 10 levels below `~/workspace`, `~/dev`, `~/projects`, `~/src` and `~/code`, without entering `.git`, `.Trash`, `Library` or `node_modules`. For each project: what git says (`rev-parse`, `check-ignore`, `ls-files`, all with `--no-optional-locks`), its files' change times and those of git's `HEAD`, and the working folders and command lines of your processes (`lsof`, `ps`)"
+keeps:
+  - "a folder git tracks a file in, one no ignore rule names by its own name, or one beside which git tracks nothing"
+  - "a `.venv` without a `pyvenv.cfg`, and a folder that holds a git repository of its own"
+  - "a folder whose project changed in the last 30 days (a file changed, or git's HEAD moved; a deletion or a rename alone does not count), or that a running process works in or names"
+  - "a folder in a project git cannot read, a submodule whose superproject is outside the roots, and a project whose repository is kept elsewhere (a separate git dir, `core.worktree`)"
+  - "everything under a project root reached through a symlink"
+  - "everything, when `lsof` or `ps` fails: the rule then shows an error and offers nothing"
 regen:
   story: The project's build recreates .next, dist and .turbo. A .venv comes back with a new environment and an install of its packages (python -m venv and pip install, or uv sync), which downloads them again.
   cost: seconds to minutes per build, no network; minutes and the network per .venv

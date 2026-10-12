@@ -60,7 +60,7 @@ Regrow's own persisted record of derived last-used timestamps (docker volumes), 
 _Avoid_: cache, database
 
 **Kept tier**:
-Objects a provider deliberately withholds from deletion — in use, keep-listed, over a safety cap, or too recent — surfaced in one surface-only rule with the reason in each row.
+Objects a provider deliberately withholds from deletion — in use, keep-listed, over a safety cap, or too recent. Docker volumes and agent sessions have one surface-only rule that lists them with the reason in each row; the other providers list what they keep nowhere.
 
 **Idle project**:
 A project that nobody is working in: no file under its folder changed within the idle window, git's HEAD did not move, and no running process works in it. The project is a git work tree (a main checkout, a linked worktree or a nested clone, each on its own); a submodule belongs to the outermost project that holds it. Build output is offered only from an idle project.
@@ -95,7 +95,7 @@ Every scanned item placed under the nearest item, from any rule, whose path cont
 The two plan subtotals: steward commands free space as they run; Trash moves free nothing until the Trash is emptied.
 
 **Pre-action**:
-A named executor hook a rule declares (`pre_action:`) that must succeed before each item's steward command runs — the docker volume tarball export. No backup, no deletion.
+A named executor hook a rule declares (`pre_action:`) that must succeed right before each item's steward command or Trash move: the docker volume tarball export, or a recheck of the item (agent session, worktree, build folder). A hook that fails leaves the item in place.
 _Avoid_: pre-hook, before-script
 
 **Export receipt**:

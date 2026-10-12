@@ -37,8 +37,8 @@ func (it Item) Unreadable() bool { return it.Partial && it.Bytes == 0 }
 type Finding struct {
 	Rule  Rule   `json:"rule"`
 	Items []Item `json:"items,omitempty"`
-	// Err records a rule-level failure (tool missing, unknown query,
-	// scan cancelled). A target that refuses or blocks is an item
+	// Err records a rule-level failure (a query that failed or timed
+	// out, unknown query, scan cancelled). A target that refuses or blocks is an item
 	// with Partial set, not an error.
 	Err string `json:"error,omitempty"`
 }

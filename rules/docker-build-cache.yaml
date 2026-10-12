@@ -9,6 +9,9 @@ category: docker
 risk: safe
 tool_query: docker-build-cache
 native_command: docker builder prune --force --filter unused-for=720h
+scans: "`docker system df -v`, through the daemon your current docker context points at. The size counts records not in use, not shared with an image layer, and last used 30 or more days ago; a record with no last-used time is not counted"
+keeps:
+  - "build records used in the last 30 days: the command's own filter, `unused-for=720h`, leaves them"
 regen:
   story: The next docker build repopulates exactly the layers it needs.
   cost: next builds slower

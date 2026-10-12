@@ -10,7 +10,8 @@ title: Agent session scratch (kept)
 category: dev-caches
 risk: surface-only
 tool_query: agent-scratch-kept
-note: Each row says why it is kept. Ended sessions move to "Agent session scratch (ended sessions)" a day after their last change.
+note: Each row says why it is kept. Ended sessions move to "Agent session scratch (ended sessions)" a day or more after their last change.
+scans: "the sessions `agent-scratch` reads, in the same pass; each row says why it is kept"
 regen:
   story: n/a — regrow never deletes these; end the session, or remove the worktree it holds, and rescan.
   cost: n/a

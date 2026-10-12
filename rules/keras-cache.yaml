@@ -11,6 +11,8 @@ paths:
   linux:
     - ~/.keras/models
     - ~/.keras/datasets
+keeps:
+  - "`~/.keras/keras.json`, your Keras settings: only the two download folders are looked at"
 regen:
   story: Keras re-downloads weights and datasets on next use.
   cost: re-download; network

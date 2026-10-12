@@ -5,11 +5,11 @@ import (
 	"strings"
 )
 
-// compareVersion compares dotted numeric versions ("15.2", "26")
+// CompareVersion compares dotted numeric versions ("15.2", "26")
 // component-wise, returning -1, 0, or 1. Missing components count as
 // zero, so "15" == "15.0". Non-numeric components compare as strings,
 // which is enough for macOS/Linux release numbering.
-func compareVersion(a, b string) int {
+func CompareVersion(a, b string) int {
 	as, bs := strings.Split(a, "."), strings.Split(b, ".")
 	for i := 0; i < len(as) || i < len(bs); i++ {
 		av, bv := component(as, i), component(bs, i)

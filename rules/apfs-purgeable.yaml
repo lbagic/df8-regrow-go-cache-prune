@@ -10,6 +10,7 @@ category: phantom-space
 risk: surface-only
 tool_query: apfs-purgeable
 note: Why Finder still shows full — Finder counts purgeable as free, df does not. macOS frees it automatically when the disk fills; deleting TM snapshots converts the biggest chunk immediately.
+scans: "the data volume's free space with and without purgeable space, as macOS reports it to `osascript` (JavaScript for Automation); no files"
 regen:
   story: Nothing to regenerate — macOS frees purgeable space on its own under pressure.
   cost: n/a — regrow only explains this number

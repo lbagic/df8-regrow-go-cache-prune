@@ -19,6 +19,14 @@ native_command: fnm uninstall {arg}
 # The four sources are read again right before each uninstall.
 pre_action: fnm-version-recheck
 note: A project that pins this version only in package.json engines or sits outside the project roots, a shell where you ran `fnm use` with it, and a cron job are not checked; each asks for `fnm install` again.
+scans: "fnm's folder (`$FNM_DIR`, or whichever exists of `fnm` in `$XDG_DATA_HOME` (else `~/.local/share`), `~/.fnm` and `~/Library/Application Support/fnm`) with its `node-versions` and `aliases`; every `.nvmrc` and `.node-version` in your home folder and in folders up to 10 levels below `~/workspace`, `~/dev`, `~/projects`, `~/src` and `~/code`, without following a symlinked folder or entering `.git`, `.Trash`, `Library` or `node_modules`; the launchd job plists in `~/Library/LaunchAgents`, `/Library/LaunchAgents` and `/Library/LaunchDaemons`, and the version files in each folder a plist names and the folders above it; and the files your running processes execute or map (`lsof -d txt`)"
+keeps:
+  - "a version an fnm alias points at, the default included"
+  - "a version a `.nvmrc` or `.node-version` there resolves to, the way fnm resolves one (`20` is the newest installed 20.x)"
+  - "a version a launchd job's plist names (any string holding its `/node-versions/<version>` folder, or an absolute path that leads into it through links), runs through fnm (`fnm exec --using=18`), or leads fnm to through a version file"
+  - "a version a running process of yours executes or maps a file from"
+  - "a folder in `node-versions` not named like a release (`vX.Y.Z`)"
+  - "every version, when any of those cannot be read or understood, when fnm has more than one folder and `FNM_DIR` names none, when a folder belongs to another user (a run under `sudo`), or when `fnm` is not on your `PATH`: the rule then shows an error and offers nothing"
 regen:
   story: fnm install <version> downloads and installs it again; npm packages installed globally into it need installing again too.
   cost: a download of about 30–50 MB per version, plus its global packages; needs the network

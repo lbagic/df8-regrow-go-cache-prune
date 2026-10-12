@@ -15,6 +15,15 @@ tool_query: agent-scratch
 # Liveness is judged again right before each Trash move.
 pre_action: agent-scratch-recheck
 note: Resuming an ended session finds its scratchpad gone. Live sessions, and sessions holding a git worktree, are listed under "Agent session scratch (kept)".
+scans: "Claude Code's session scratch folders, `/private/tmp/claude-<uid>/<project>/<session-id>/`. Which sessions have ended comes from `ps` (your processes, and `CLAUDE_CONFIG_DIR` and `HOME` from the environment of each running `claude`), Claude Code's session registries (`<config>/sessions/`) and its transcripts (`~/.claude*/projects/`)"
+keeps:
+  - "a session a running `claude` process is registered for, or was started with (`--resume`, `-r`, `--session-id`)"
+  - "a session whose scratch holds the working folder of a running, registered `claude` session, or the program of a running process started by its full path (another process working in the scratch, a dev server say, does not keep it)"
+  - "a session whose transcript or scratch changed in the last 24 hours, or since an unregistered `claude` process that a session started began running"
+  - "a session whose scratch holds a git worktree, or a repository with a worktree elsewhere"
+  - "a session whose transcript or scratch could not be read in full, and every session when a project folder under the scratch root cannot be read"
+  - "everything, when regrow cannot tell which sessions are running (`ps` or a registry it cannot read): the rule then shows an error and offers nothing"
+  - "Kept sessions are listed, with the reason, under `agent-scratch-kept`."
 regen:
   story: Not regenerated — scratch is what an agent wrote while it worked; new sessions start with an empty one.
   cost: an ended session's intermediate files; nothing for new sessions

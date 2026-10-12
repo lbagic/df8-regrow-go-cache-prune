@@ -9,6 +9,8 @@ paths:
     - ~/Library/Application Support/nomic.ai/GPT4All/*.gguf
   linux:
     - ~/.local/share/nomic.ai/GPT4All/*.gguf
+keeps:
+  - "the LocalDocs database beside the models: only `.gguf` files match"
 regen:
   story: Re-download any model from GPT4All's in-app catalog.
   cost: re-download GBs; network

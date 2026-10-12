@@ -15,11 +15,11 @@ func TestCompareVersion(t *testing.T) {
 		{"15.2.1", "15.2", 1},
 	}
 	for _, tt := range tests {
-		if got := compareVersion(tt.a, tt.b); got != tt.want {
-			t.Errorf("compareVersion(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+		if got := CompareVersion(tt.a, tt.b); got != tt.want {
+			t.Errorf("CompareVersion(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 		}
-		if got := compareVersion(tt.b, tt.a); got != -tt.want {
-			t.Errorf("compareVersion(%q, %q) = %d, want %d", tt.b, tt.a, got, -tt.want)
+		if got := CompareVersion(tt.b, tt.a); got != -tt.want {
+			t.Errorf("CompareVersion(%q, %q) = %d, want %d", tt.b, tt.a, got, -tt.want)
 		}
 	}
 }

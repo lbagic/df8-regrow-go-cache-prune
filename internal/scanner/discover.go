@@ -25,6 +25,17 @@ var builtinExcludes = map[string]bool{
 	"node_modules": true,
 }
 
+// DiscoverDefaults is what every discover walk does that its rule does
+// not say: the depth below each root when max_depth is 0, and the
+// folder names it never descends into, sorted.
+func DiscoverDefaults() (maxDepth int, excludes []string) {
+	for name := range builtinExcludes {
+		excludes = append(excludes, name)
+	}
+	slices.Sort(excludes)
+	return defaultMaxDepth, excludes
+}
+
 // discover walks the rule's roots looking for directories that match
 // the discover spec: base name (if set) plus every marker file
 // present. Missing roots are skipped; that lets rules list

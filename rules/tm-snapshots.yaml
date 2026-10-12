@@ -11,6 +11,9 @@ risk: caution
 tool_query: tm-snapshots
 native_command: tmutil deletelocalsnapshots {arg}
 note: Snapshot sizes are invisible until deleted — freed space shows up as purgeable, sometimes minutes later.
+scans: "`tmutil listlocalsnapshots /`. A snapshot's size is unknown until it is deleted, so each row shows 0 B"
+keeps:
+  - "snapshots not named `com.apple.TimeMachine.…`, such as the ones macOS takes for an update"
 regen:
   story: macOS creates fresh local snapshots on the next backup cycle.
   cost: point-in-time restores between backups are gone

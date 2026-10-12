@@ -1,4 +1,4 @@
-# Anonymous volumes (docker-created, 64-hex names) that no container
+# Anonymous volumes (labelled com.docker.volume.anonymous) that no container
 # references and that were last used — per the usage ledger — more
 # than 30 days ago. The honest default candidate among volumes; still
 # caution because volume contents are data, not cache.
@@ -10,6 +10,13 @@ tool_query: docker-volumes-anon
 native_command: docker volume rm {arg}
 pre_action: docker-volume-export
 note: Anonymous volumes appear when a container runs without a named mount. Unreferenced and untouched for 30+ days; each is exported to a tarball in regrow staging before removal.
+scans: "`docker system df -v`, `docker volume inspect` and `docker container inspect`, through the daemon your current docker context points at. A volume's last use is the latest create, start or stop of a container that mounted it when a scan looked, remembered in `~/.local/state/regrow/docker-volumes.json` so it outlives that container; a volume no scan saw mounted counts from its creation"
+keeps:
+  - "a volume any container mounts, stopped containers included"
+  - "a volume the keep-list in `~/.config/regrow/config.yaml` names, by name glob or compose project"
+  - "a volume bigger than the export cap (10 GiB unless `volume_export_cap` says otherwise)"
+  - "an anonymous volume created in the last 30 days, or whose last use a scan recorded in the last 30 days"
+  - "Kept volumes are listed, with the reason, under `docker-volumes-kept`."
 regen:
   story: Not regenerable — the pre-delete tarball in regrow staging is the recovery copy (docker volume create, then untar).
   cost: data is gone for good once staging is cleared

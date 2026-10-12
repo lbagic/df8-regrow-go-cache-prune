@@ -11,6 +11,7 @@ category: phantom-space
 risk: surface-only
 tool_query: docker-vm-disk
 note: Why Finder still shows full — the file is sparse; only the "real" number is on disk. Pruning inside Docker (see the docker rules) lets it shrink itself.
+scans: "the size of Docker Desktop's disk image, `~/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw` (or `Docker.qcow2`); no program runs, so it works with Docker stopped"
 regen:
   story: Shrinks itself after pruning (Docker.raw, 4.28+); last resort is Docker Desktop ▸ Troubleshoot ▸ Purge Data.
   cost: n/a — regrow never touches this file

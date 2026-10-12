@@ -11,6 +11,7 @@ risk: caution
 tool_query: ollama-models
 native_command: ollama rm {arg}
 note: Custom models built with `ollama create` are not re-pullable. `ollama rm` needs the Ollama server running.
+scans: "Ollama's model manifests under `$OLLAMA_MODELS/manifests`, else `~/.ollama/models/manifests`, so models show while the server is stopped; no program runs. A model's size is what removing it alone frees: the blobs no other model uses, at the sizes the manifests declare"
 regen:
   story: ollama pull re-downloads any registry model on demand.
   cost: re-download GBs; network

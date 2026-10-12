@@ -1,7 +1,6 @@
 # Emptying the Trash is the one deletion with no undo — and regrow's
 # own undo story parks things *in* the Trash — so this is caution,
-# never auto-selected, despite clean.sh calling it safe. Finder
-# handles per-volume .Trashes too.
+# never auto-selected. Finder handles per-volume .Trashes too.
 id: trash-empty
 title: Empty Trash
 category: macos
