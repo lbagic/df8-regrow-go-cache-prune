@@ -525,3 +525,20 @@ func TestCursorNoteExplainsPartialSizes(t *testing.T) {
 		t.Fatalf("footer must explain an unreadable row, got:\n%s", view)
 	}
 }
+
+func TestPlanScreenReclaimLeavesOutVolumeExports(t *testing.T) {
+	m := newTestModel(t)
+	m.plan = engine.Plan{Actions: []engine.Action{
+		{RuleID: "go-build-cache", Kind: engine.ActionNative, Command: []string{"go", "clean", "-cache"}, Bytes: 3 << 30},
+		{RuleID: "dev-caches", Kind: engine.ActionTrash, Path: "/Users/fixture/.cache/x", Bytes: 1 << 30},
+		{RuleID: "docker-volumes-named", Kind: engine.ActionNative, Command: []string{"docker", "volume", "rm", "v"}, Bytes: 5 << 30, PreAction: engine.PreActionVolumeExport},
+	}}
+	m.state = statePlan
+	view := m.View()
+	if !lineHas(view, "Would reclaim:", "4.0 GiB") || strings.Contains(view, "9.0 GiB") {
+		t.Fatalf("a volume's export keeps its bytes on disk; Would reclaim is the steward command and the Trash move, got:\n%s", view)
+	}
+	if !lineHas(view, "Volume exports", "5.0 GiB") {
+		t.Fatalf("the volume's bytes stay visible on their own line, got:\n%s", view)
+	}
+}

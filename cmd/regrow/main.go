@@ -289,7 +289,7 @@ func printPlan(plan engine.Plan, asJSON bool) error {
 	for _, line := range tui.TotalsLines(plan) {
 		fmt.Println(line)
 	}
-	fmt.Printf("Would reclaim: %s\n", tui.HumanBytes(plan.TotalBytes()))
+	fmt.Printf("Would reclaim: %s\n", tui.HumanBytes(plan.ReclaimBytes()))
 	return nil
 }
 

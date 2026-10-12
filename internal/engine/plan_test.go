@@ -394,6 +394,21 @@ func TestPlanTotalsSplitByKind(t *testing.T) {
 	}
 }
 
+func TestPlanReclaimBytesLeavesOutVolumeExports(t *testing.T) {
+	p := Plan{Actions: []Action{
+		{Kind: ActionTrash, Bytes: 100},
+		{Kind: ActionNative, Bytes: 20},
+		{Kind: ActionPrune, Bytes: 4},
+		{Kind: ActionNative, Bytes: 7, PreAction: PreActionVolumeExport},
+	}}
+	if got := p.ReclaimBytes(); got != 124 {
+		t.Fatalf("ReclaimBytes = %d, want 124: the Trash move, the steward command and the prune, not the volume's 7", got)
+	}
+	if got := p.TotalBytes(); got != 131 {
+		t.Fatalf("TotalBytes = %d, want the plan's whole sum 131, the TUI footer's plan ~X", got)
+	}
+}
+
 func TestBuildPlanMarksSudoActions(t *testing.T) {
 	findings := []Finding{
 		{Rule: Rule{ID: "whole-sudo", Risk: RiskCaution, NativeCommand: Argv{"mdutil", "-E", "/"}, Sudo: true},

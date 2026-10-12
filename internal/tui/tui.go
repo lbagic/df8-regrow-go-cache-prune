@@ -741,7 +741,7 @@ func (m Model) viewPlan() string {
 	for _, line := range TotalsLines(m.plan) {
 		b.WriteString("  " + line + "\n")
 	}
-	fmt.Fprintf(&b, "  Would reclaim: %s\n", styleTitle.Render(HumanBytes(m.plan.TotalBytes())))
+	fmt.Fprintf(&b, "  Would reclaim: %s\n", styleTitle.Render(HumanBytes(m.plan.ReclaimBytes())))
 	b.WriteString(styleFaint.Render("  Also scriptable: `regrow clean [id ...]`.") + "\n\n")
 	b.WriteString(styleFaint.Render("  x execute (asks again) · esc back · q quit") + "\n")
 	return b.String()

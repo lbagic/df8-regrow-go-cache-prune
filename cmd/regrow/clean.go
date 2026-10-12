@@ -78,7 +78,7 @@ func printPlanActions(plan engine.Plan) {
 	for _, line := range tui.TotalsLines(plan) {
 		fmt.Println(line)
 	}
-	fmt.Printf("Total: %s\n", tui.HumanBytes(plan.TotalBytes()))
+	fmt.Printf("Would reclaim: %s\n", tui.HumanBytes(plan.ReclaimBytes()))
 }
 
 // executePlan runs an already-confirmed plan: oplog first, then the

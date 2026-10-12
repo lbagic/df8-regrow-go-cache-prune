@@ -89,6 +89,14 @@ func (p Plan) TotalBytes() int64 {
 	return n
 }
 
+// ReclaimBytes is what the plan gives back as free space: TotalBytes
+// without the volume exports, whose tarballs keep their bytes on disk.
+// A Trash move counts, as it frees them once the Trash is emptied.
+func (p Plan) ReclaimBytes() int64 {
+	t := p.Totals()
+	return t.FreesNow + t.AfterTrash
+}
+
 // Totals buckets the plan's bytes by when they become free space: a
 // steward command frees them as it runs, a Trash move frees nothing
 // until the Trash is emptied, and a command that exports first (a docker
