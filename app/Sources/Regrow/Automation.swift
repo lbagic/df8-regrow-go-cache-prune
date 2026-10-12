@@ -12,7 +12,7 @@ enum Automation {
         do {
             _ = try ChildProcess.start(
                 "/usr/bin/osascript", arguments: ["-e", question],
-                environment: ProcessInfo.processInfo.environment, errorLog: nil, queue: queue,
+                environment: Account.environment(), errorLog: nil, queue: queue,
                 onLine: { _ in },
                 onExit: { exit in answer(exit.status == 0) })
         } catch {

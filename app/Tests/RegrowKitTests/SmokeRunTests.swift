@@ -8,6 +8,8 @@ import Testing
 /// the notification centre.
 @Suite("Smoke run")
 struct SmokeRunTests {
+    private static let bundledRules = URL(fileURLWithPath: "/Applications/Regrow.app/Contents/Resources/smoke")
+
     private func standInEngine(receiptMethod: String = "finder", in directory: URL) throws -> String {
         let script = #"""
             #!/bin/bash
@@ -82,10 +84,9 @@ struct SmokeRunTests {
     func trashPasses() async throws {
         try await withTemporaryDirectory { directory in
             let engine = try standInEngine(in: directory)
-            try Data(#"["sentinel"]"#.utf8).write(to: directory.appendingPathComponent("select.json"))
             let run = smoke(directory, engine: engine)
 
-            #expect(await offThread { run.trash() })
+            #expect(await offThread { run.trash(rules: Self.bundledRules) })
 
             #expect(text("result.txt", in: directory) == """
                 PASS hello: fda=granted
@@ -111,14 +112,13 @@ struct SmokeRunTests {
             #expect(undo["output"] as? String == "restoring run run-1\nrestored 1 item")
             #expect((result["environment"] as? [String: Any])?["captured"] as? Bool == true)
 
-            // The rules, the selection and the state directory are the
-            // smoke directory's own, for the engine and for undo alike.
+            // The state directory is the smoke directory's own, for the
+            // engine and for undo alike; the rules are the bundle's.
             let state = directory.appendingPathComponent("state").path
-            let rules = directory.appendingPathComponent("rules").path
-            #expect(text("engine-call.txt", in: directory) == "engine --rules-dir \(rules) | \(state)\n")
+            #expect(text("engine-call.txt", in: directory) == "engine --rules-dir \(Self.bundledRules.path) | \(state)\n")
             #expect(text("undo-call.txt", in: directory) == "run-1 | \(state)\n")
             let planned = try json("plan-request.json", in: directory)
-            #expect(planned["select"] as? [String] == ["sentinel"])
+            #expect(planned["select"] as? [String] == ["smoke-sentinel"])
             #expect(planned["scan_id"] as? String == "scan-1")
         }
     }
@@ -129,7 +129,7 @@ struct SmokeRunTests {
             let engine = try standInEngine(in: directory)
             let run = smoke(directory, engine: engine, finderAllows: false)
 
-            #expect(await offThread { run.trash() } == false)
+            #expect(await offThread { run.trash(rules: Self.bundledRules) } == false)
 
             #expect(text("result.txt", in: directory) == """
                 PASS hello: fda=granted
@@ -148,10 +148,9 @@ struct SmokeRunTests {
     func stagingFails() async throws {
         try await withTemporaryDirectory { directory in
             let engine = try standInEngine(receiptMethod: "staging", in: directory)
-            try Data(#"["sentinel"]"#.utf8).write(to: directory.appendingPathComponent("select.json"))
             let run = smoke(directory, engine: engine)
 
-            #expect(await offThread { run.trash() } == false)
+            #expect(await offThread { run.trash(rules: Self.bundledRules) } == false)
 
             let lines = text("result.txt", in: directory)?.split(separator: "\n").map(String.init) ?? []
             #expect(lines.suffix(2) == ["FAIL execute: method=staging", "RESULT failed"])
@@ -161,19 +160,21 @@ struct SmokeRunTests {
         }
     }
 
-    @Test("a selection file that is missing fails the plan stage")
-    func noSelection() async throws {
+    @Test("rules and a selection the smoke directory holds are not read: the bundle's rule is planned alone")
+    func callerRulesIgnored() async throws {
         try await withTemporaryDirectory { directory in
             let engine = try standInEngine(in: directory)
+            let callers = directory.appendingPathComponent("rules")
+            try FileManager.default.createDirectory(at: callers, withIntermediateDirectories: true)
+            try Data("id: messages\n".utf8).write(to: callers.appendingPathComponent("messages.yaml"))
+            try Data(#"["messages"]"#.utf8).write(to: directory.appendingPathComponent("select.json"))
             let run = smoke(directory, engine: engine)
 
-            #expect(await offThread { run.trash() } == false)
+            #expect(await offThread { run.trash(rules: Self.bundledRules) })
 
-            let lines = text("result.txt", in: directory)?.split(separator: "\n").map(String.init) ?? []
-            #expect(lines.count == 5)
-            #expect(lines[3].hasPrefix("FAIL plan: "))
-            #expect(lines[3].hasSuffix("select.json is not a JSON list of atoms"))
-            #expect(lines[4] == "RESULT failed")
+            let call = text("engine-call.txt", in: directory) ?? ""
+            #expect(call.hasPrefix("engine --rules-dir \(Self.bundledRules.path) |"))
+            #expect(try json("plan-request.json", in: directory)["select"] as? [String] == ["smoke-sentinel"])
         }
     }
 

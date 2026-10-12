@@ -179,4 +179,48 @@ struct RealEngineTests {
             #expect(!kept.isEmpty)
         }
     }
+
+    @Test("the bundle's smoke rule lists only ~/regrow-smoke-* and plans its Trash move")
+    func bundledSmokeRule() async throws {
+        try await withTemporaryDirectory { directory in
+            let engine = try await buildEngine(into: directory)
+            let rules = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("Resources/smoke")
+            let home = directory.appendingPathComponent("home")
+            let state = directory.appendingPathComponent("state")
+            for folder in ["regrow-smoke-123", "regrow-smoke", "Library/Messages"] {
+                let path = home.appendingPathComponent(folder)
+                try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+                try Data(count: 4096).write(to: path.appendingPathComponent("keep.bin"))
+            }
+            try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
+
+            let session = Session()
+            try session.start(
+                engine, arguments: ["engine", "--rules-dir", rules.path],
+                environment: toolPath.merging(["HOME": home.path, "XDG_STATE_HOME": state.path]) { $1 },
+                log: directory.appendingPathComponent("engine.log"))
+            try #require(await session.shell.wait(20) { !$0.isEmpty } != nil)
+
+            session.fromPage(["type": "scan", "id": "s1"])
+            let scanned = try #require(await session.page.wait(60, until: ended("s1")))
+            let scanID = try #require(events(scanned, "start", re: "s1").first?["scan_id"] as? String)
+            let findings = events(scanned, "finding", re: "s1")
+            try #require(findings.count == 1)
+            let finding = try #require(findings[0]["finding"] as? [String: Any])
+            #expect((finding["rule"] as? [String: Any])?["id"] as? String == SmokeRun.sentinelRule)
+            let items = try #require(finding["items"] as? [[String: Any]])
+            #expect(items.compactMap { $0["path"] as? String } == [home.appendingPathComponent("regrow-smoke-123").path])
+
+            session.fromPage(["type": "plan", "id": "p1", "scan_id": scanID, "select": [SmokeRun.sentinelRule]])
+            let planned = try #require(await session.page.wait(30, until: ended("p1")))
+            let plan = try #require(events(planned, "plan", re: "p1").first)
+            let actions = try #require((plan["plan"] as? [String: Any])?["actions"] as? [[String: Any]])
+            #expect(actions.map { $0["kind"] as? String } == ["trash"])
+            #expect(actions.map { $0["path"] as? String } == [home.appendingPathComponent("regrow-smoke-123").path])
+
+            #expect(await session.stop() == .stdinClosed)
+        }
+    }
 }

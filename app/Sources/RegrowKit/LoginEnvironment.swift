@@ -27,8 +27,11 @@ public enum LoginEnvironment {
 
     /// Runs `shell` as a login, interactive shell that prints its
     /// environment between two markers, and gives up after `timeout`.
+    /// The shell starts from `environment`, never the app's own: a
+    /// `ZDOTDIR` or `HOME` there would choose the files it runs.
     public static func capture(
-        shell: String = loginShell(), timeout: TimeInterval = 5
+        shell: String = loginShell(), environment: [String: String] = Account.environment(),
+        timeout: TimeInterval = 5
     ) -> Result<[String: String], Failure> {
         let token = UUID().uuidString
         let opening = "regrow-environment-\(token)-begins"
@@ -44,7 +47,7 @@ public enum LoginEnvironment {
         do {
             pid = try Spawn.start(
                 shell, arguments: ["-l", "-i", "-c", command],
-                environment: ProcessInfo.processInfo.environment,
+                environment: environment,
                 stdin: null, stdout: output.write, stderr: null, group: .session)
         } catch {
             close(null)

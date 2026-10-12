@@ -46,7 +46,7 @@ app:
 app-build:
     scripts/app.sh build
 
-# end-to-end checks through the installed app: `just app-smoke trash` or `just app-smoke alert`
+# end-to-end checks through the installed app: `just app-smoke trash`, `alert` or `doors`
 app-smoke mode:
     scripts/app-smoke.sh {{mode}}
 

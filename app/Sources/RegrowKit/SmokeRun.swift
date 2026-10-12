@@ -9,6 +9,40 @@ import Foundation
 ///
 /// The engine's state is `<dir>/state/regrow/` in both sequences.
 public final class SmokeRun {
+    /// The one rule the trash sequence selects: it lists
+    /// `~/regrow-smoke-*`, and its file ships in the bundle.
+    public static let sentinelRule = "smoke-sentinel"
+
+    /// The directory a smoke run may use. A sealed run takes only a
+    /// directory `mktemp` made in the per-user temp folder, named
+    /// `regrow-smoke.<letters and digits>`, with no link on the way but
+    /// the system's `/var`: the engine's state and the results are
+    /// written there.
+    public static func directory(
+        _ argument: String, sealed: Bool, temporary: URL = Account.temporaryDirectory
+    ) -> URL? {
+        let directory = URL(fileURLWithPath: argument)
+        guard sealed else { return directory }
+        let name = directory.lastPathComponent
+        let suffix = name.dropFirst("regrow-smoke.".count)
+        guard name.hasPrefix("regrow-smoke."), !suffix.isEmpty,
+            suffix.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }),
+            let parent = realPath(temporary.path), [temporary.path, "/private" + temporary.path].contains(parent),
+            let resolved = realPath(argument), resolved == parent + "/" + name
+        else { return nil }
+        var info = stat()
+        guard lstat(resolved, &info) == 0, info.st_mode & S_IFMT == S_IFDIR, info.st_uid == getuid() else {
+            return nil
+        }
+        return URL(fileURLWithPath: resolved, isDirectory: true)
+    }
+
+    private static func realPath(_ path: String) -> String? {
+        guard let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
     /// What only the app can do, each a call that blocks for its answer.
     public struct Hooks {
         /// The environment the app starts its engine with, and why the
@@ -76,13 +110,13 @@ public final class SmokeRun {
     }
 
     /// hello, automation, scan, plan, execute, undo: one item goes to
-    /// the Trash through Finder and comes back. The rules are
-    /// `<dir>/rules` and the selection is `<dir>/select.json`. True
-    /// when every stage passed and both files were written.
-    public func trash() -> Bool {
+    /// the Trash through Finder and comes back. The engine loads only
+    /// `rules`, and the plan selects `sentinelRule`. True when every
+    /// stage passed and both files were written.
+    public func trash(rules: URL) -> Bool {
         run {
             let environment = engineEnvironment()
-            try startEngine(["engine", "--rules-dir", directory.appendingPathComponent("rules").path], environment)
+            try startEngine(["engine", "--rules-dir", rules.path], environment)
             try hello()
 
             let allowed = hooks.askFinder()
@@ -98,11 +132,7 @@ public final class SmokeRun {
             let findings = scanned.filter { $0["event"] as? String == "finding" }.count
             pass("scan", "\(findings) \(findings == 1 ? "finding" : "findings")")
 
-            let selectFile = directory.appendingPathComponent("select.json")
-            guard let data = try? Data(contentsOf: selectFile),
-                let select = try? JSONSerialization.jsonObject(with: data) as? [String]
-            else { try fail("plan", "\(selectFile.path) is not a JSON list of atoms") }
-            send(["type": "plan", "id": "shell-plan", "scan_id": scanID, "select": select])
+            send(["type": "plan", "id": "shell-plan", "scan_id": scanID, "select": [Self.sentinelRule]])
             let planned = try answer(to: "shell-plan", stage: "plan", within: limits.plan)
             guard let plan = named("plan", in: planned), let planID = plan["plan_id"] as? String else {
                 try fail("plan", "no plan came back")

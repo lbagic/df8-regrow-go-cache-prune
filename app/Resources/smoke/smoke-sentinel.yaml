@@ -1,0 +1,11 @@
+id: smoke-sentinel
+title: Smoke test sentinel
+category: dev-caches
+risk: caution
+paths:
+  darwin:
+    - ~/regrow-smoke-*
+regen:
+  story: Nothing regrows it; the smoke test restores it with undo.
+  cost: none
+sudo: false

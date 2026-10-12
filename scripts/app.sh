@@ -3,8 +3,10 @@
 #
 #   scripts/app.sh build     assemble app/.build/bundle/Regrow.app, ad-hoc signed.
 #                            It runs, but macOS keeps no grant for it across rebuilds.
-#   scripts/app.sh install   build, sign with the identity scripts/signing-cert.sh
-#                            recorded, replace ~/Applications/Regrow.app, launch it.
+#   scripts/app.sh signed    the same, signed with the identity scripts/signing-cert.sh
+#                            recorded: the installed app's twin, left in place for checks.
+#   scripts/app.sh install   build, sign with that identity, replace
+#                            ~/Applications/Regrow.app, launch it.
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -17,15 +19,15 @@ QUIT_LIMIT=45
 
 mode="${1:-}"
 case "$mode" in
-build | install) ;;
+build | signed | install) ;;
 *)
-	echo "usage: $0 build|install" >&2
+	echo "usage: $0 build|signed|install" >&2
 	exit 64
 	;;
 esac
 
 identity=-
-if [ "$mode" = install ]; then
+if [ "$mode" != build ]; then
 	if [ ! -s "$RECORD" ]; then
 		echo "No signing identity recorded. Run scripts/signing-cert.sh once, then this again." >&2
 		exit 1
@@ -43,9 +45,11 @@ if [ "$mode" = install ]; then
 	fi
 fi
 
-# codesign waits forever on a keychain dialog nobody answers.
+# codesign waits forever on a keychain dialog nobody answers. The hardened
+# runtime makes dyld ignore DYLD_ variables, which `open --env` can set.
 sign() {
-	codesign --force --timestamp=none --sign "$identity" "$@" &
+	codesign --force --timestamp=none --options runtime \
+		--entitlements "$ROOT/app/Regrow.entitlements" --sign "$identity" "$@" &
 	signer=$!
 	(
 		sleep "$SIGN_LIMIT"
@@ -139,6 +143,7 @@ cp "$bin/Regrow" "$BUNDLE/Contents/MacOS/Regrow"
 CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=$version" \
 	-o "$BUNDLE/Contents/MacOS/regrow-engine" ./cmd/regrow
 cp "$ROOT/app/Resources/page.html" "$BUNDLE/Contents/Resources/page.html"
+cp -R "$ROOT/app/Resources/smoke" "$BUNDLE/Contents/Resources/smoke"
 cp "$ROOT/app/Resources/Info.plist" "$BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $short" \
 	-c "Set :CFBundleVersion $version" "$BUNDLE/Contents/Info.plist"
@@ -155,6 +160,10 @@ if [ "$mode" = build ]; then
 fi
 
 codesign -d -r- "$BUNDLE" 2>&1 | sed -n 's/^designated => /Signed as: /p'
+if [ "$mode" = signed ]; then
+	echo "Signed as the installed app is, and not installed."
+	exit 0
+fi
 
 stop_running
 

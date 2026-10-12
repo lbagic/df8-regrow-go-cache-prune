@@ -121,7 +121,7 @@ final class Shell: ObservableObject {
             base = environment
             log("environment captured from \(LoginEnvironment.loginShell()): \(environment.count) variables")
         case .failure(let failure):
-            base = ProcessInfo.processInfo.environment
+            base = Account.environment()
             environmentFailure = failure.reason
             log("environment not captured: \(failure.reason)")
             window?.deliver(environmentLine(failure.reason))
@@ -442,7 +442,7 @@ final class Shell: ObservableObject {
         do {
             _ = try Spawn.start(
                 "/bin/sh", arguments: ["-c", wait, "sh", "\(getpid())", bundle],
-                environment: ProcessInfo.processInfo.environment,
+                environment: Account.environment(),
                 stdin: null, stdout: null, stderr: null, group: .session)
             log("relaunching")
             MainRunLoop.quit()

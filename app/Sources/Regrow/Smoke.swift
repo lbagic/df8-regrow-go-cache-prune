@@ -9,9 +9,8 @@ enum Smoke {
         case alert
     }
 
-    static func run(_ mode: Mode, directory: String) -> Never {
+    static func run(_ mode: Mode, directory: URL) -> Never {
         let config = Config.load()
-        let directory = URL(fileURLWithPath: directory)
         let notifier = Notifier(log: LogFile(url: directory.appendingPathComponent("smoke.log")))
         let run = SmokeRun(
             directory: directory, engine: config.engine,
@@ -25,7 +24,7 @@ enum Smoke {
         Thread.detachNewThread {
             let ok: Bool
             switch mode {
-            case .trash: ok = run.trash()
+            case .trash: ok = run.trash(rules: config.smokeRules)
             case .alert: ok = run.alert(engineArguments: config.engineArguments)
             }
             exit(ok ? 0 : 1)
@@ -44,7 +43,7 @@ enum Smoke {
         case .success(let environment):
             return (config.engineEnvironment(over: environment), nil)
         case .failure(let failure):
-            return (config.engineEnvironment(over: ProcessInfo.processInfo.environment), failure.reason)
+            return (config.engineEnvironment(over: Account.environment()), failure.reason)
         }
     }
 
