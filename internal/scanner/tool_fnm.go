@@ -381,14 +381,25 @@ func (s *nodeSurvey) versionFiles(ctx context.Context) error {
 
 // keepVersionFile keeps what one .nvmrc or .node-version resolves to.
 // A file that is not there names nothing, nor does a name no file can
-// have. A path too long to open by names nothing when its folder is
-// not there (a shell string read as a path); in a folder that is, it
-// is an error, as fnm opens the file relative to its working
-// directory.
+// have; a link that leads nowhere is an error, as it may lead into a
+// disk that is not mounted. A path too long to open by names nothing
+// when its folder is not there (a shell string read as a path); in a
+// folder that is, it is an error, as fnm opens the file relative to
+// its working directory.
 func (s *nodeSurvey) keepVersionFile(ctx context.Context, path string, reason func(spec string) string) error {
 	data, err := readSource(ctx, s.w, path)
 	switch {
-	case absent(err), namesNoFile(path, err):
+	case absent(err):
+		switch _, lerr := s.w.lstat(ctx, path); {
+		case lerr == nil:
+			if !s.goneFromItsFolder(ctx, path) {
+				return fmt.Errorf("%s is a link that leads nowhere, so the version it names cannot be known", tilde(engine.Host{Home: s.home}, path))
+			}
+		case !absent(lerr):
+			return withPath(path, lerr)
+		}
+		return nil
+	case namesNoFile(path, err):
 		return nil
 	case errors.Is(err, syscall.ENAMETOOLONG):
 		// EvalSymlinks looks the folder up one name at a time, which a
@@ -411,6 +422,95 @@ func (s *nodeSurvey) keepVersionFile(ctx context.Context, path string, reason fu
 	return nil
 }
 
+// withPath names path in err unless err already does.
+func withPath(path string, err error) error {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return err
+	}
+	return fmt.Errorf("%s: %w", path, err)
+}
+
+// isVersionFileName reports a name fnm opening a version file finds
+// where case is ignored: APFS folds as strings.EqualFold does (.NVMRC,
+// and a long s for s).
+func isVersionFileName(name string) bool {
+	for v := range nodeVersionFiles {
+		if strings.EqualFold(name, v) {
+			return true
+		}
+	}
+	return false
+}
+
+// leadsNowhere is an error when path is a link to nothing, which may
+// lead into a disk that is not mounted. Whatever else keeps path from
+// being looked at is left to the read that follows.
+func (s *nodeSurvey) leadsNowhere(ctx context.Context, path string) error {
+	if fi, err := s.w.lstat(ctx, path); err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+		return nil
+	}
+	if _, err := s.w.stat(ctx, path); absent(err) && !s.goneFromItsFolder(ctx, path) {
+		return fmt.Errorf("%s is a link that leads nowhere", tilde(engine.Host{Home: s.home}, path))
+	}
+	return nil
+}
+
+// goneFromItsFolder reports a link that leads nowhere only because its
+// target, a name in the link's own folder, is not there: a lock a
+// build or an editor left. That folder is there to be read, so no disk
+// that is not mounted can be behind it. A target reached through
+// another link is not gone.
+func (s *nodeSurvey) goneFromItsFolder(ctx context.Context, link string) bool {
+	target, err := bounded(ctx, s.w, link, func() (string, error) { return os.Readlink(link) })
+	i := strings.LastIndexByte(link, '/')
+	if err != nil || i < 0 {
+		return false
+	}
+	dir := link[:max(i, 1)]
+	if !filepath.IsAbs(target) {
+		target = dir + "/" + target
+	}
+	j := strings.LastIndexByte(target, '/')
+	here, err := s.w.stat(ctx, dir)
+	if err != nil {
+		return false
+	}
+	there, err := s.w.stat(ctx, target[:max(j, 1)])
+	if err != nil || !os.SameFile(here, there) {
+		return false
+	}
+	_, err = s.w.lstat(ctx, target)
+	return absent(err)
+}
+
+// versionFileSkips are the folders the version-file walk does not
+// enter, by name: what they hold is no pin of the user's projects (a
+// package's own under node_modules, git's data, what was deleted).
+var versionFileSkips = map[string]bool{".git": true, ".Trash": true, "node_modules": true}
+
+// folderID is a folder's identity, however a path spells it.
+type folderID struct {
+	dev uint64
+	ino uint64
+}
+
+// folderIDOf is false where the filesystem gives no inode, so every
+// folder there is its own.
+func folderIDOf(fi fs.FileInfo) (folderID, bool) {
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok || st.Ino == 0 {
+		return folderID{}, false
+	}
+	return folderID{uint64(st.Dev), st.Ino}, true
+}
+
+// findVersionFiles walks the project roots to projectDepth, following
+// symlinks as the folders or files they lead to. A folder is walked
+// again only from a shallower depth than every walk of it so far, which
+// bounds a link back to a folder above it. A link that cannot be
+// followed may hide a version file, as a folder that cannot be read
+// may.
 func (s *nodeSurvey) findVersionFiles(ctx context.Context) ([]string, error) {
 	var files []string
 	for name := range nodeVersionFiles {
@@ -420,44 +520,112 @@ func (s *nodeSurvey) findVersionFiles(ctx context.Context) ([]string, error) {
 	// be visited; closed keeps it off the returned list.
 	var mu sync.Mutex
 	closed := false
+	seen := map[folderID]int{}
+	var broken []string
 	host := engine.Host{Home: s.home}
+	brokenLink := func(path string, err error) string {
+		if absent(err) {
+			return tilde(host, path) + " is a link that leads nowhere"
+		}
+		return fmt.Sprintf("%s is a link that cannot be followed (%v)", tilde(host, path), err)
+	}
+	// enter reports whether a folder reached at depth is walked from
+	// there.
+	enter := func(fi fs.FileInfo, depth int) bool {
+		id, ok := folderIDOf(fi)
+		if !ok {
+			return true
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if d, ok := seen[id]; ok && d <= depth {
+			return false
+		}
+		seen[id] = depth
+		return true
+	}
 	for _, raw := range projectRoots {
 		root := filepath.Clean(host.ExpandPath(raw))
 		fi, err := s.w.stat(ctx, root)
 		switch {
 		case absent(err):
+			switch _, lerr := s.w.lstat(ctx, root); {
+			case lerr == nil:
+				if !s.goneFromItsFolder(ctx, root) {
+					return nil, fmt.Errorf("%s, so a version file behind it cannot be ruled out", brokenLink(root, err))
+				}
+			case !absent(lerr):
+				return nil, withPath(root, lerr)
+			}
 			continue
 		case err != nil:
 			return nil, fmt.Errorf("%s: %w", root, err)
-		case !fi.IsDir():
+		case !fi.IsDir() || !enter(fi, 0):
 			continue
 		}
 		partial, err := s.w.walk(ctx, root, func(dir string, batch []fs.DirEntry) ([]string, bool) {
 			depth := relDepth(root, dir) + 1
-			var subdirs, hits []string
+			var subdirs, hits, failed []string
 			for _, e := range batch {
-				switch name := e.Name(); {
-				case e.IsDir():
-					if depth <= projectDepth && !builtinExcludes[name] {
-						subdirs = append(subdirs, childPath(dir, name))
+				name := e.Name()
+				path := childPath(dir, name)
+				link := e.Type()&fs.ModeSymlink != 0
+				enterable := depth <= projectDepth && !versionFileSkips[name]
+				folder := enterable && (link || e.IsDir())
+				versionFile := isVersionFileName(name)
+				if !folder && !versionFile {
+					continue
+				}
+				var fi fs.FileInfo
+				var err error
+				switch {
+				case link:
+					fi, err = s.w.stat(ctx, path)
+					if absent(err) && s.goneFromItsFolder(ctx, path) {
+						continue
 					}
-				case nodeVersionFiles[name]:
-					hits = append(hits, childPath(dir, name))
+					if err != nil {
+						failed = append(failed, brokenLink(path, err))
+						continue
+					}
+				case e.IsDir():
+					if fi, err = e.Info(); err != nil {
+						if !absent(err) {
+							failed = append(failed, fmt.Sprintf("%s: %v", tilde(host, path), err))
+						}
+						continue
+					}
+				}
+				switch {
+				case fi != nil && fi.IsDir():
+					if enterable && enter(fi, depth) {
+						subdirs = append(subdirs, path)
+					}
+				case versionFile:
+					hits = append(hits, path)
 				}
 			}
-			if len(hits) > 0 {
+			if len(hits) > 0 || len(failed) > 0 {
 				mu.Lock()
 				if !closed {
 					files = append(files, hits...)
+					broken = append(broken, failed...)
 				}
 				mu.Unlock()
 			}
-			return subdirs, true
+			return subdirs, len(failed) == 0
 		})
 		if err != nil {
 			return nil, err
 		}
 		if partial {
+			mu.Lock()
+			defer mu.Unlock()
+			closed = true
+			if len(broken) > 0 {
+				slices.Sort(broken)
+				return nil, fmt.Errorf("%s, so a version file behind it cannot be ruled out", broken[0])
+			}
 			return nil, fmt.Errorf("folders under %s are not fully readable, so a version file there cannot be ruled out", root)
 		}
 	}
@@ -543,6 +711,9 @@ func (s *nodeSurvey) launchdJobs(ctx context.Context) error {
 		dirs = append(dirs, filepath.Join(s.root, d))
 	}
 	for _, dir := range dirs {
+		if err := s.leadsNowhere(ctx, dir); err != nil {
+			return err
+		}
 		entries, partial, err := s.w.list(ctx, dir)
 		if err != nil {
 			return err
@@ -558,6 +729,16 @@ func (s *nodeSurvey) launchdJobs(ctx context.Context) error {
 			file := filepath.Join(dir, e.Name())
 			data, err := readSource(ctx, s.w, file)
 			if absent(err) {
+				// Listed, yet absent when opened: a link that leads
+				// nowhere, unless the entry went meanwhile.
+				switch _, lerr := s.w.lstat(ctx, file); {
+				case lerr == nil:
+					if !s.goneFromItsFolder(ctx, file) {
+						return fmt.Errorf("%s is a link that leads nowhere", tilde(engine.Host{Home: s.home}, file))
+					}
+				case !absent(lerr):
+					return withPath(file, lerr)
+				}
 				continue
 			}
 			if err != nil {
@@ -631,7 +812,8 @@ func (s *nodeSurvey) fnmSpecs(words []string, reason string) {
 
 // jobVersionFiles keeps what the version files a launchd job may lead
 // fnm to read resolve to: the .nvmrc and .node-version in each of
-// paths and in each folder above it. Given every path the plist names,
+// paths and in each folder above it, any of which that is a link
+// leading nowhere being an error. Given every path the plist names,
 // as spelled and with symlinks resolved (fnm walks up from the working
 // directory as getcwd returns it), that covers `--using=<file>`, a
 // WorkingDirectory, a shell that cds, a login shell whose rc files run
@@ -641,13 +823,39 @@ func (s *nodeSurvey) jobVersionFiles(ctx context.Context, paths []string, reason
 	byReason := func(string) string { return reason }
 	seen := map[string]bool{}
 	for _, p := range paths {
+		if err := s.linksBeforeDotDot(ctx, p); err != nil {
+			return err
+		}
 		for dir := p; !seen[dir]; dir = filepath.Dir(dir) {
 			seen[dir] = true
+			if err := s.leadsNowhere(ctx, dir); err != nil {
+				return err
+			}
 			for name := range nodeVersionFiles {
 				if err := s.keepVersionFile(ctx, filepath.Join(dir, name), byReason); err != nil {
 					return err
 				}
 			}
+		}
+	}
+	return nil
+}
+
+// linksBeforeDotDot looks at each folder of path before its last ..
+// as spelled: the system takes .. after the link before it, while
+// filepath.Dir drops both by their text, so a link there that leads
+// nowhere would go unseen.
+func (s *nodeSurvey) linksBeforeDotDot(ctx context.Context, path string) error {
+	parts := strings.Split(path, "/")
+	last := 0
+	for i, part := range parts {
+		if part == ".." {
+			last = i
+		}
+	}
+	for i := 1; i < last; i++ {
+		if err := s.leadsNowhere(ctx, strings.Join(parts[:i+1], "/")); err != nil {
+			return err
 		}
 	}
 	return nil

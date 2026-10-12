@@ -5,14 +5,17 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"os/user"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/lbagic/regrow/internal/engine"
 )
@@ -253,6 +256,9 @@ func TestFnmVersionsKeptByVersionFiles(t *testing.T) {
 		{"system names no install", "workspace/app/.nvmrc", "system", nil, nil},
 		{"an empty file", "workspace/app/.nvmrc", "\n", nil, nil},
 		{"inside node_modules", "workspace/app/node_modules/pkg/.nvmrc", "16", nil, nil},
+		{"inside a repository's .git", "workspace/app/.git/modules/lib/.nvmrc", "16", nil, nil},
+		{"inside a .Trash", "workspace/.Trash/app/.nvmrc", "16", nil, nil},
+		{"in a folder named Library", "workspace/app/Library/tool/.nvmrc", "16", nil, []string{"v16.20.2"}},
 		{"outside the project roots", "Documents/app/.nvmrc", "16", nil, nil},
 	}
 	for _, tc := range cases {
@@ -278,6 +284,267 @@ func TestFnmVersionsKeptByVersionFilesSaysWhich(t *testing.T) {
 	writeText(t, filepath.Join(f.home, "workspace", "app", ".nvmrc"), "18\n")
 	if got := f.keptBy("v18.17.1"); !slices.Contains(got, "~/workspace/app/.nvmrc (18)") {
 		t.Errorf("kept by %q, want the file and its spec", got)
+	}
+}
+
+// symlink makes link, and the folders above it, lead to target.
+func (f *fnmFixture) symlink(target, link string) {
+	f.t.Helper()
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		f.t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+func TestFnmVersionsKeptByVersionFilesBehindLinks(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(f *fnmFixture)
+	}{
+		{"a symlinked project", func(f *fnmFixture) {
+			writeText(f.t, filepath.Join(f.home, "elsewhere", "app", ".nvmrc"), "16")
+			f.symlink(filepath.Join(f.home, "elsewhere", "app"), filepath.Join(f.home, "workspace", "app"))
+		}},
+		{"a symlinked folder inside a project", func(f *fnmFixture) {
+			writeText(f.t, filepath.Join(f.home, "shared", "web", ".node-version"), "16.20.2")
+			f.symlink(filepath.Join(f.home, "shared", "web"), filepath.Join(f.home, "workspace", "mono", "apps", "web"))
+		}},
+		{"a relative link", func(f *fnmFixture) {
+			writeText(f.t, filepath.Join(f.home, "shared", "web", ".nvmrc"), "16")
+			f.symlink(filepath.Join("..", "..", "shared", "web"), filepath.Join(f.home, "workspace", "mono", "web"))
+		}},
+		{"a link to a link", func(f *fnmFixture) {
+			writeText(f.t, filepath.Join(f.home, "disk", "app", ".nvmrc"), "16")
+			f.symlink(filepath.Join(f.home, "disk", "app"), filepath.Join(f.home, "opt", "app"))
+			f.symlink(filepath.Join(f.home, "opt", "app"), filepath.Join(f.home, "workspace", "app"))
+		}},
+		{"a symlinked project root", func(f *fnmFixture) {
+			writeText(f.t, filepath.Join(f.home, "disk", "code", "app", ".nvmrc"), "16")
+			f.symlink(filepath.Join(f.home, "disk", "code"), filepath.Join(f.home, "code"))
+		}},
+		{"a symlinked version file", func(f *fnmFixture) {
+			writeText(f.t, filepath.Join(f.home, "shared", "nvmrc"), "16")
+			f.symlink(filepath.Join(f.home, "shared", "nvmrc"), filepath.Join(f.home, "workspace", "app", ".nvmrc"))
+		}},
+		// The link sits at the walk's last depth, so its folder's own
+		// folders are only reached from ~/dev, where it is shallow.
+		{"a folder first reached deep through a link", func(f *fnmFixture) {
+			deep := filepath.Join(append([]string{f.home, "workspace"}, slices.Repeat([]string{"d"}, projectDepth-1)...)...)
+			f.symlink(filepath.Join(f.home, "dev", "x"), filepath.Join(deep, "link"))
+			writeText(f.t, filepath.Join(f.home, "dev", "x", "y", ".nvmrc"), "16")
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+			tc.setup(f)
+			f.wantOffered("v18.17.1")
+		})
+	}
+}
+
+// A link that leads nowhere only because its target, in the link's own
+// folder, is gone hides nothing: a lock a build or an editor left.
+func TestFnmVersionsLinksToAGoneSiblingNameNothing(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(f *fnmFixture)
+	}{
+		{"a compiler's lock, by its absolute path", func(f *fnmFixture) {
+			dir := filepath.Join(f.home, "workspace", "app", ".build", "debug", "ModuleCache")
+			f.symlink(filepath.Join(dir, "Foo-ABC.swiftmodule.lock-f44a32cd"), filepath.Join(dir, "Foo-ABC.swiftmodule.lock"))
+		}},
+		{"an editor's lock, by a bare name", func(f *fnmFixture) {
+			f.symlink("dev@host.1234:1700000000", filepath.Join(f.home, "workspace", "app", ".#index.js"))
+		}},
+		{"a lock in a project reached through a link", func(f *fnmFixture) {
+			real := filepath.Join(f.home, "elsewhere", "app")
+			writeText(f.t, filepath.Join(real, "x"), "")
+			f.symlink(filepath.Join(real, "y.lock-1"), filepath.Join(real, "y.lock"))
+			f.symlink(real, filepath.Join(f.home, "workspace", "app"))
+		}},
+		{"a version file", func(f *fnmFixture) {
+			f.symlink(".nvmrc-old", filepath.Join(f.home, "workspace", "app", ".nvmrc"))
+		}},
+		{"the home's version file", func(f *fnmFixture) {
+			f.symlink(".nvmrc-old", filepath.Join(f.home, ".nvmrc"))
+		}},
+		{"a project root", func(f *fnmFixture) {
+			f.symlink("code-old", filepath.Join(f.home, "code"))
+		}},
+		{"a launchd plist", func(f *fnmFixture) {
+			f.symlink("dev.example.old.plist", filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"))
+		}},
+		{"a folder a launchd job names", func(f *fnmFixture) {
+			dir := filepath.Join(f.home, "srv", "bot")
+			f.symlink("bot-old", dir)
+			writeText(f.t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+				launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "node", "index.js"}, map[string]string{"WorkingDirectory": dir}))
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+			tc.setup(f)
+			f.wantOffered("v16.20.2", "v18.17.1")
+		})
+	}
+}
+
+// Links back to a folder the walk is in, or several to one folder,
+// read each folder once.
+func TestFnmVersionsWalkReadsEachFolderOnce(t *testing.T) {
+	f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+	app := filepath.Join(f.home, "workspace", "app")
+	shared := filepath.Join(f.home, "shared")
+	writeText(t, filepath.Join(shared, "web", ".nvmrc"), "16")
+	f.symlink(app, filepath.Join(app, "src", "up"))
+	f.symlink(filepath.Dir(app), filepath.Join(app, "src", "root"))
+	f.symlink("..", filepath.Join(app, "src", "parent"))
+	f.symlink(shared, filepath.Join(app, "a"))
+	f.symlink(shared, filepath.Join(app, "b"))
+	var mu sync.Mutex
+	reads := map[string]int{}
+	f.n.w.open = func(path string) (dirHandle, error) {
+		if real, err := filepath.EvalSymlinks(path); err == nil {
+			mu.Lock()
+			reads[real]++
+			mu.Unlock()
+		}
+		return openDir(path)
+	}
+	f.wantOffered("v18.17.1")
+	for dir, n := range reads {
+		if n > 1 {
+			t.Errorf("%s read %d times, want once", dir, n)
+		}
+	}
+	if reads[filepath.Join(shared, "web")] != 1 {
+		t.Errorf("the linked folder was not read: %v", reads)
+	}
+}
+
+// fnm opens .nvmrc in a folder, which on a volume that ignores case
+// finds .NVMRC too.
+func TestFnmVersionsVersionFileNamesInAnyCase(t *testing.T) {
+	for _, name := range []string{".NVMRC", ".Node-Version", ".node-ver\u017fion"} {
+		t.Run(name, func(t *testing.T) {
+			f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+			writeText(t, filepath.Join(f.home, "workspace", "app", name), "16")
+			f.wantOffered("v18.17.1")
+		})
+	}
+}
+
+func TestFnmVersionsUpperCaseLinkAtTheWalksLastDepth(t *testing.T) {
+	f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+	writeText(t, filepath.Join(f.home, "dotfiles", "pin"), "16")
+	deep := filepath.Join(append([]string{f.home, "workspace"}, slices.Repeat([]string{"d"}, projectDepth)...)...)
+	f.symlink(filepath.Join(f.home, "dotfiles", "pin"), filepath.Join(deep, ".NVMRC"))
+	f.wantOffered("v18.17.1")
+}
+
+// Through links that lead somewhere, a job's folder and a plist are
+// read as what they lead to.
+func TestFnmVersionsKeptByLinkedLaunchdJobs(t *testing.T) {
+	t.Run("a job's folder", func(t *testing.T) {
+		f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+		disk := filepath.Join(f.home, "disk", "bot")
+		writeText(t, filepath.Join(disk, ".nvmrc"), "16")
+		dir := filepath.Join(f.home, "srv", "bot")
+		f.symlink(disk, dir)
+		writeText(t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+			launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "node", "index.js"}, map[string]string{"WorkingDirectory": dir}))
+		f.wantOffered("v18.17.1")
+	})
+	t.Run("a plist", func(t *testing.T) {
+		f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+		target := filepath.Join(f.home, "disk", "dev.example.job.plist")
+		writeText(t, target, launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "--using=16", "node", "index.js"}, nil))
+		f.symlink(target, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"))
+		f.wantOffered("v18.17.1")
+	})
+	t.Run("a job's path with .. after a link", func(t *testing.T) {
+		f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+		vol := filepath.Join(f.home, "disk", "vol")
+		if err := os.MkdirAll(filepath.Join(vol, "proj"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeText(t, filepath.Join(vol, "bot", ".nvmrc"), "16")
+		link := filepath.Join(f.home, "srv", "proj")
+		f.symlink(filepath.Join(vol, "proj"), link)
+		writeText(t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+			launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "node", "index.js"}, map[string]string{"WorkingDirectory": link + "/../bot"}))
+		f.wantOffered("v18.17.1")
+	})
+	t.Run("a launchd folder", func(t *testing.T) {
+		f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+		target := filepath.Join(f.home, "disk", "LaunchAgents")
+		writeText(t, filepath.Join(target, "dev.example.job.plist"),
+			launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "--using=16", "node", "index.js"}, nil))
+		agents := filepath.Join(f.home, userLaunchdDir)
+		if err := os.Remove(agents); err != nil {
+			t.Fatal(err)
+		}
+		f.symlink(target, agents)
+		f.wantOffered("v18.17.1")
+	})
+	// The program is a file, so the version files below it name nothing.
+	t.Run("a job naming a program file", func(t *testing.T) {
+		f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+		tool := filepath.Join(f.home, "bin", "tool")
+		writeText(t, tool, "#!/bin/sh\n")
+		writeText(t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"), launchdPlist(tool, []string{tool, "--flag"}, nil))
+		f.wantOffered("v16.20.2", "v18.17.1")
+	})
+}
+
+// One folder reached through links at several depths, its version file
+// where only the shallowest reach sees it. The walk's workers reach the
+// links in no set order.
+func TestFnmVersionsShallowestReachThroughLinks(t *testing.T) {
+	pinned := func(t *testing.T, shallow bool) *fnmFixture {
+		f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+		x := filepath.Join(f.home, "elsewhere", "x")
+		writeText(t, filepath.Join(x, "a", "b", "c", "d", "e", "f", ".nvmrc"), "16")
+		for i, n := range []int{8, 6, 4, 3} {
+			chain := filepath.Join(append([]string{f.home, "workspace", "deep"}, slices.Repeat([]string{"d"}, n)...)...)
+			for j := range 3 {
+				f.symlink(x, filepath.Join(chain, fmt.Sprintf("l%d%d", i, j)))
+			}
+		}
+		if shallow {
+			f.symlink(x, filepath.Join(f.home, "workspace", "p", "q", "r", "shallow"))
+		}
+		return f
+	}
+	t.Run("one reach is shallow enough", func(t *testing.T) {
+		pinned(t, true).wantOffered("v18.17.1")
+	})
+	t.Run("every reach is too deep", func(t *testing.T) {
+		pinned(t, false).wantOffered("v16.20.2", "v18.17.1")
+	})
+}
+
+// The walk's depth and its skipped folders bound which links it
+// follows, as they bound the folders it enters.
+func TestFnmVersionsLinksPastTheWalk(t *testing.T) {
+	cases := []struct {
+		name string
+		link string // relative to home, leading nowhere
+	}{
+		{"below the walk's depth", filepath.Join(append([]string{"workspace"}, slices.Repeat([]string{"d"}, projectDepth)...)...) + "/gone"},
+		{"inside node_modules", "workspace/app/node_modules/pkg/gone"},
+		{"named node_modules", "workspace/app/node_modules"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+			f.symlink(filepath.Join(f.home, "nowhere"), filepath.Join(f.home, tc.link))
+			f.wantOffered("v16.20.2", "v18.17.1")
+		})
 	}
 }
 
@@ -790,6 +1057,114 @@ func TestFnmVersionsUnknownSourceOffersNone(t *testing.T) {
 			writeText(f.t, filepath.Join(p, "x"), "")
 			chmod(f.t, p, 0)
 		}, "cannot be ruled out"},
+		{"a folder deep in a project that cannot be read", func(f *fnmFixture) {
+			p := filepath.Join(f.home, "workspace", "app", "packages", "locked")
+			writeText(f.t, filepath.Join(p, "x"), "")
+			chmod(f.t, p, 0)
+		}, "cannot be ruled out"},
+		{"a link that leads nowhere", func(f *fnmFixture) {
+			f.symlink(filepath.Join(f.home, "gone", "app"), filepath.Join(f.home, "workspace", "app"))
+		}, "~/workspace/app is a link that leads nowhere"},
+		{"a link to a version file that is not there", func(f *fnmFixture) {
+			f.symlink(filepath.Join(f.home, "gone", ".nvmrc"), filepath.Join(f.home, "workspace", "app", ".nvmrc"))
+		}, "~/workspace/app/.nvmrc is a link that leads nowhere"},
+		{"a link to a version file that is not there, in the walk's deepest folders", func(f *fnmFixture) {
+			deep := filepath.Join(append([]string{f.home, "workspace"}, slices.Repeat([]string{"d"}, projectDepth)...)...)
+			f.symlink(filepath.Join(f.home, "gone", ".nvmrc"), filepath.Join(deep, ".nvmrc"))
+		}, "/.nvmrc is a link that leads nowhere"},
+		{"a project root that leads nowhere", func(f *fnmFixture) {
+			f.symlink(filepath.Join(f.home, "disk", "code"), filepath.Join(f.home, "code"))
+		}, "~/code is a link that leads nowhere"},
+		{"a link into a folder the user cannot search", func(f *fnmFixture) {
+			locked := filepath.Join(f.home, "locked")
+			writeText(f.t, filepath.Join(locked, "app", ".nvmrc"), "16")
+			f.symlink(filepath.Join(locked, "app"), filepath.Join(f.home, "workspace", "app"))
+			chmod(f.t, locked, 0)
+		}, "~/workspace/app is a link that cannot be followed"},
+		{"a link to itself", func(f *fnmFixture) {
+			f.symlink("loop", filepath.Join(f.home, "workspace", "loop"))
+		}, "~/workspace/loop is a link that cannot be followed"},
+		{"a home version file that is a link leading nowhere", func(f *fnmFixture) {
+			f.symlink(filepath.Join(f.home, "dotfiles", ".nvmrc"), filepath.Join(f.home, ".nvmrc"))
+		}, "~/.nvmrc is a link that leads nowhere"},
+		{"a version file a job reads that is a link leading nowhere", func(f *fnmFixture) {
+			dir := filepath.Join(f.home, "srv", "bot")
+			f.symlink(filepath.Join(f.home, "dotfiles", "bot.node-version"), filepath.Join(dir, ".node-version"))
+			writeText(f.t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+				launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "node", "index.js"}, map[string]string{"WorkingDirectory": dir}))
+		}, "~/srv/bot/.node-version is a link that leads nowhere"},
+		{"a launchd job's folder that is a link leading nowhere", func(f *fnmFixture) {
+			dir := filepath.Join(f.home, "srv", "bot")
+			f.symlink(filepath.Join(f.home, "disk", "bot"), dir)
+			writeText(f.t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+				launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "node", "index.js"}, map[string]string{"WorkingDirectory": filepath.Join(dir, "app")}))
+		}, "~/srv/bot is a link that leads nowhere"},
+		{"a launchd plist that is a link leading nowhere", func(f *fnmFixture) {
+			f.symlink(filepath.Join(f.home, "disk", "dev.example.job.plist"), filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"))
+		}, "dev.example.job.plist is a link that leads nowhere"},
+		// The kernel takes .. after the link before it, where a walk up by
+		// the path's text does not.
+		{"a launchd job's path with .. after a link leading nowhere", func(f *fnmFixture) {
+			link := filepath.Join(f.home, "srv", "proj")
+			f.symlink(filepath.Join(f.home, "disk", "vol", "proj"), link)
+			writeText(f.t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+				launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "node", "index.js"}, map[string]string{"WorkingDirectory": link + "/../bot"}))
+		}, "~/srv/proj is a link that leads nowhere"},
+		{"a launchd job's path through a link leading nowhere, with a trailing slash", func(f *fnmFixture) {
+			link := filepath.Join(f.home, "srv", "bot")
+			f.symlink(filepath.Join(f.home, "disk", "bot"), link)
+			writeText(f.t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+				launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "node", "index.js"}, map[string]string{"WorkingDirectory": link + "/"}))
+		}, "~/srv/bot is a link that leads nowhere"},
+		{"a log path a plist names through a link leading nowhere", func(f *fnmFixture) {
+			logs := filepath.Join(f.home, "logs")
+			f.symlink(filepath.Join(f.home, "old", "logs"), logs)
+			writeText(f.t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+				launchdPlist("/usr/bin/true", nil, map[string]string{"StandardOutPath": filepath.Join(logs, "job.log")}))
+		}, "~/logs is a link that leads nowhere"},
+		{"a launchd folder that is a link leading nowhere", func(f *fnmFixture) {
+			agents := filepath.Join(f.home, userLaunchdDir)
+			if err := os.Remove(agents); err != nil {
+				f.t.Fatal(err)
+			}
+			f.symlink(filepath.Join(f.home, "disk", "LaunchAgents"), agents)
+		}, "~/Library/LaunchAgents is a link that leads nowhere"},
+		{"a launchd plist that is a link to a link leading nowhere", func(f *fnmFixture) {
+			mid := filepath.Join(f.home, "dotfiles", "job.plist")
+			f.symlink(filepath.Join(f.home, "disk", "job.plist"), mid)
+			f.symlink(mid, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"))
+		}, "dev.example.job.plist is a link that leads nowhere"},
+		{"a launchd plist that is a link through a file", func(f *fnmFixture) {
+			file := filepath.Join(f.home, "dotfiles", "notadir")
+			writeText(f.t, file, "x")
+			f.symlink(filepath.Join(file, "job.plist"), filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"))
+		}, "dev.example.job.plist is a link that leads nowhere"},
+		{"a launchd job's folder that is a loop of links", func(f *fnmFixture) {
+			a, b := filepath.Join(f.home, "srv", "a"), filepath.Join(f.home, "srv", "b")
+			f.symlink(b, a)
+			f.symlink(a, b)
+			writeText(f.t, filepath.Join(f.home, userLaunchdDir, "dev.example.job.plist"),
+				launchdPlist("", []string{"/opt/homebrew/bin/fnm", "exec", "node", "index.js"}, map[string]string{"WorkingDirectory": filepath.Join(a, "app")}))
+		}, "too many"},
+		{"a link to a sibling link that leads nowhere", func(f *fnmFixture) {
+			app := filepath.Join(f.home, "workspace", "app")
+			f.symlink(filepath.Join(f.home, "disk", "app"), filepath.Join(app, "b"))
+			f.symlink("b", filepath.Join(app, "a"))
+		}, "~/workspace/app/a is a link that leads nowhere"},
+		{"a link to a gone name in a folder below its own", func(f *fnmFixture) {
+			app := filepath.Join(f.home, "workspace", "app")
+			f.symlink(filepath.Join("sub", "x"), filepath.Join(app, "x.lock"))
+		}, "~/workspace/app/x.lock is a link that leads nowhere"},
+		{"a link to a gone name in the folder above its own", func(f *fnmFixture) {
+			app := filepath.Join(f.home, "workspace", "app")
+			f.symlink(filepath.Join("..", "x"), filepath.Join(app, "x.lock"))
+		}, "~/workspace/app/x.lock is a link that leads nowhere"},
+		{"a symlinked folder that cannot be read", func(f *fnmFixture) {
+			locked := filepath.Join(f.home, "shared", "locked")
+			writeText(f.t, filepath.Join(locked, "x"), "")
+			f.symlink(locked, filepath.Join(f.home, "workspace", "app"))
+			chmod(f.t, locked, 0)
+		}, "cannot be ruled out"},
 		{"the aliases folder cannot be read", func(f *fnmFixture) {
 			chmod(f.t, filepath.Join(f.dir, "aliases"), 0)
 		}, "aliases is not fully readable"},
@@ -903,6 +1278,38 @@ func TestFnmVersionRecheck(t *testing.T) {
 	f.n.Mapped = func(context.Context) ([]string, error) { return nil, errors.New("lsof failed") }
 	if err := f.n.recheck(ctx, f.version("v18.17.1")); err == nil {
 		t.Error("recheck passed with the process list unknown")
+	}
+}
+
+type fakeDirInfo struct{ st *syscall.Stat_t }
+
+func (fakeDirInfo) Name() string       { return "d" }
+func (fakeDirInfo) Size() int64        { return 0 }
+func (fakeDirInfo) Mode() fs.FileMode  { return fs.ModeDir }
+func (fakeDirInfo) ModTime() time.Time { return time.Time{} }
+func (fakeDirInfo) IsDir() bool        { return true }
+func (f fakeDirInfo) Sys() any         { return f.st }
+
+func TestFolderIDOfInodeZero(t *testing.T) {
+	if _, ok := folderIDOf(fakeDirInfo{&syscall.Stat_t{Dev: 1, Ino: 0}}); ok {
+		t.Error("inode 0 read as an identity")
+	}
+	if _, ok := folderIDOf(fakeDirInfo{&syscall.Stat_t{Dev: 1, Ino: 7}}); !ok {
+		t.Error("inode 7 read as no identity")
+	}
+}
+
+func TestFnmVersionRecheckThroughLinks(t *testing.T) {
+	ctx := context.Background()
+	f := newFnmFixture(t, "v16.20.2", "v18.17.1")
+	writeText(t, filepath.Join(f.home, "elsewhere", "app", ".nvmrc"), "16")
+	f.symlink(filepath.Join(f.home, "elsewhere", "app"), filepath.Join(f.home, "workspace", "app"))
+	if err := f.n.recheck(ctx, f.version("v16.20.2")); err == nil || !strings.Contains(err.Error(), "referenced now") {
+		t.Errorf("recheck after a symlinked project pinned it: %v, want referenced now", err)
+	}
+	f.symlink(filepath.Join(f.home, "gone"), filepath.Join(f.home, "workspace", "dead"))
+	if err := f.n.recheck(ctx, f.version("v18.17.1")); err == nil || !strings.Contains(err.Error(), "leads nowhere") {
+		t.Errorf("recheck with a dead link under the roots: %v, want leads nowhere", err)
 	}
 }
 
