@@ -256,7 +256,7 @@ Package caches, build caches and build output of developer tools, and what codin
 - **Looks at:** `~/Library/Caches/go-build`.
 - **Removed by:** `go clean -cache`, once for the whole rule: all of it or nothing. It deletes for good: `regrow undo` cannot bring it back.
 - **Comes back:** Repopulated automatically by the next go build. Cost: next builds slower once; no network.
-- **Prune:** `regrow prune go-build --yes` deletes entries unused for 48h directly, oldest first, an hour of entries at a time, until the cache is down to about 15 GiB. Autotrim, once you turn it on, does the same while free space is low, and stops when it is back at its target. No Trash and no undo. A running `go`, `compile` or `link` refuses a prune by hand, and puts autotrim off unless builds have kept it waiting for hours and free space is critically low.
+- **Prune:** `regrow prune go-build --yes` deletes entries unused for 24h directly, oldest first, an hour of entries at a time, until the cache is down to about 15 GiB. Autotrim, once you turn it on, does the same while free space is low, and stops when it is back at its target. No Trash and no undo. A running `go`, `compile` or `link` refuses a prune by hand, and puts autotrim off unless builds have kept it waiting for hours and free space is critically low.
 - **Fix the cause:** Go worktrees without -trimpath. `regrow doctor` says whether it is in effect here and prints the fix; regrow changes nothing.
 
 ### go-mod-cache
