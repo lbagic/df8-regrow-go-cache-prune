@@ -415,7 +415,7 @@ func TestEmbeddedGoBuildRuleCarriesThePolicy(t *testing.T) {
 			}
 			continue
 		}
-		want := &Prune{MinAge: Duration(48 * time.Hour), KeepUnder: 15 << 30, UnlessRunning: []string{"go", "compile", "link"}}
+		want := &Prune{MinAge: Duration(24 * time.Hour), KeepUnder: 15 << 30, UnlessRunning: []string{"go", "compile", "link"}}
 		if !reflect.DeepEqual(r.Prune, want) {
 			t.Errorf("go-build-cache prune = %+v, want %+v", r.Prune, want)
 		}

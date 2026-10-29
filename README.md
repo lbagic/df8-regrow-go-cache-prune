@@ -14,7 +14,7 @@ regrow is a catalog of rules, one YAML file each in [`rules/`](rules), and a sin
 It is not:
 
 - an app uninstaller, a duplicate finder, or a tool for your documents. Rules for what may be the only copy of something (iOS backups, model libraries) or what regrow cannot judge item by item (`~/Library/Caches`, `/Library/Updates`) are surface-only: shown with their size, never deleted.
-- a background cleaner. The one removal that runs by itself is autotrim of Go build cache entries unused for 48 hours, while free space is low and only until it is back at its target; a running build defers it, where `regrow prune go-build --yes` refuses. It is off until you turn it on (the app's switch, or `--autotrim` on a single `regrow tick`), and it refuses to run until a `regrow prune go-build --yes` of your own has run to completion.
+- a background cleaner. The one removal that runs by itself is autotrim of Go build cache entries unused for 24 hours, while free space is low and only until it is back at its target; a running build defers it, where `regrow prune go-build --yes` refuses. It is off until you turn it on (the app's switch, or `--autotrim` on a single `regrow tick`), and it refuses to run until a `regrow prune go-build --yes` of your own has run to completion.
 - a network service. regrow's own code opens no network connection: no telemetry, no update check, no account. A few programs it starts can reach the network on their own, and [docs/SCAN.md](docs/SCAN.md) names them.
 
 regrow is built and tested for macOS only. The rules carry Linux paths for a later Linux build.
@@ -76,7 +76,7 @@ Ids are rule ids (`sim-devices`) or item ids (`sim-devices/AAA-111`), as the sca
 | `regrow history [--json]` | Past runs, from the oplog. |
 | `regrow doctor [--json]` | Runaway bugs, causes to fix, phantom space. Read-only. |
 | `regrow tick [--autotrim] [--json]` | One sample of free space, purgeable space and swap, with a days-to-full forecast and alerts; `--autotrim` also prunes the Go build cache when free space is low. |
-| `regrow prune go-build [--yes] [--json]` | Delete Go build cache entries not used for 48 hours, oldest first, until the cache is down to 15 GiB, and nothing when it already is; a dry run without `--yes`. |
+| `regrow prune go-build [--yes] [--json]` | Delete Go build cache entries not used for 24 hours, oldest first, until the cache is down to 15 GiB, and nothing when it already is; a dry run without `--yes`. |
 | `regrow rules [--json]` | List the catalog. |
 | `regrow engine` | JSON lines on stdin and stdout, for the menubar app ([docs/ENGINE.md](docs/ENGINE.md)). |
 | `regrow version`, `regrow help` | Print the version, or this list with the flags. |
@@ -110,7 +110,7 @@ Flags go before ids: `regrow clean --yes go-build-cache`. `--rules-dir DIR` load
 
 ## What regrow never does
 
-- It never removes anything you did not confirm, except autotrim, which you turn on, which unlocks only after a `regrow prune go-build --yes` of your own that runs to completion, and which removes only Go build cache entries unused for 48 hours while free space is low.
+- It never removes anything you did not confirm, except autotrim, which you turn on, which unlocks only after a `regrow prune go-build --yes` of your own that runs to completion, and which removes only Go build cache entries unused for 24 hours while free space is low.
 - It never deletes a surface-only item, or a folder that holds one.
 - It never empties the Trash unless you pick "Empty Trash".
 - It never runs `rm`. Deletion goes through the Trash, a tool's own command, or the Go build cache prune's `find … -delete`.
