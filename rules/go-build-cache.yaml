@@ -15,7 +15,7 @@ native_command: go clean -cache
 # for min_age are deleted directly, oldest first, until the cache is
 # down to keep_under or free space is back at its target.
 prune:
-  min_age: 48h
+  min_age: 24h
   keep_under: 15GiB
   unless_running: [go, compile, link]
 regen:
